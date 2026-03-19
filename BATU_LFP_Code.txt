@@ -1,0 +1,1400 @@
+// stream datasets
+var FREEFLOWINGRIVER_ASSET = 'WWF/HydroSHEDS/v1/FreeFlowingRivers';
+var ARCHYDRO_ASSET = 'projects/geeornek1/assets/Meric_ArcGIDHydro';
+var EUHYDRO_ASSET = 'projects/geeornek1/assets/Pinios_EUHYDRO_ASSET';
+var NHDFLOWLINE_ASSET = 'projects/geeornek1/assets/USA_Merged5';
+
+// Global Variables
+var StreamData, FIELD_ID, FIELD_NEXT, FIELD_LENGTH;
+var IS_DOWNSTREAM_POINTER, ID_IS_STRING, LENGTH_UNIT, BASIN_FIELD;
+var DATA_SOURCE_NAME;
+var STREAM_LAYER = null;
+var LONGEST = null;
+var SELECTED = null;
+var BASIN_LAYER = null;
+var UPSTREAM_NETWORK = null;
+var SELECTED_PROFILE_SEGMENT_LAYER = ui.Map.Layer(null, null, null, false);
+var analysisMode = 'browse';
+
+// Basin data sets paths
+var BASIN_PATHS = {
+  'HUC02': 'USGS/WBD/2017/HUC02',
+  'HUC04': 'USGS/WBD/2017/HUC04', 
+  'HUC06': 'USGS/WBD/2017/HUC06',
+  'HUC08': 'USGS/WBD/2017/HUC08', 
+  'HUC10': 'USGS/WBD/2017/HUC10', 
+  'HUC12': 'USGS/WBD/2017/HUC12',
+  'HydroSHEDS L02': 'WWF/HydroSHEDS/v1/Basins/hybas_2', 
+  'HydroSHEDS L03': 'WWF/HydroSHEDS/v1/Basins/hybas_3',
+  'HydroSHEDS L04': 'WWF/HydroSHEDS/v1/Basins/hybas_4', 
+  'HydroSHEDS L05': 'WWF/HydroSHEDS/v1/Basins/hybas_5',
+  'HydroSHEDS L06': 'WWF/HydroSHEDS/v1/Basins/hybas_6', 
+  'HydroSHEDS L07': 'WWF/HydroSHEDS/v1/Basins/hybas_7',
+  'HydroSHEDS L08': 'WWF/HydroSHEDS/v1/Basins/hybas_8', 
+  'HydroSHEDS L09': 'WWF/HydroSHEDS/v1/Basins/hybas_9',
+  'HydroSHEDS L10': 'WWF/HydroSHEDS/v1/Basins/hybas_10', 
+  'HydroSHEDS L11': 'WWF/HydroSHEDS/v1/Basins/hybas_11',
+  'HydroSHEDS L12': 'WWF/HydroSHEDS/v1/Basins/hybas_12',
+  'USA Val_Watersheds': ee.FeatureCollection("projects/geeornek1/assets/USAValidationWatersheds2"),
+  'Med_Watersheds': ee.FeatureCollection("projects/geeornek1/assets/Greece"),
+};
+
+var HUC_LEVELS = ['HUC02','HUC04', 'HUC06', 'HUC08', 'HUC10', 'HUC12'];
+var HS_LEVELS = ['HydroSHEDS L02','HydroSHEDS L03', 'HydroSHEDS L04', 'HydroSHEDS L05', 'HydroSHEDS L06', 'HydroSHEDS L07', 'HydroSHEDS L08', 
+                 'HydroSHEDS L09', 'HydroSHEDS L10', 'HydroSHEDS L11', 'HydroSHEDS L12'];
+var USA_Val = ['USA Val_Watersheds'];
+var MEDITERRANIAN_Val = ['Med_Watersheds'];
+
+var PRESET_BASINS = {
+  '1- Nile (HydroSHEDS L03)':       {lat: 15.60, lon: 32.55, basinType: 'HydroSHEDS', level: 'HydroSHEDS L03', stream: 'FreeFlowingRivers', zoom: 4},
+  '2- Amazon (HydroSHEDS L03)':     {lat: -3.47, lon: -60.05, basinType: 'HydroSHEDS', level: 'HydroSHEDS L03', stream: 'FreeFlowingRivers', zoom: 4},
+  '3- Mississippi (HydroSHEDS L02)':         {lat: 38.80, lon: -90.20, basinType: 'HydroSHEDS', level: 'HydroSHEDS L02', stream: 'FreeFlowingRivers', zoom: 4},
+  '4- Meriç (Maritza) (HydroSHEDS L05)':{lat: 41.799, lon: 26.026, basinType: 'HydroSHEDS', level: 'HydroSHEDS L05', stream: 'ArcHydro', zoom: 10},
+  '5- Coyote Creek (HUC08)':       {lat: 37.1522, lon: -121.4875, basinType: 'USA Val_Watersheds', level: 'USA Val_Watersheds', stream: 'NHDFlowline', zoom: 10},
+  '6- Cow Bayou (HUC08)':          {lat: 31.3222, lon: -97.2939, basinType: 'USA Val_Watersheds', level: 'USA Val_Watersheds', stream: 'NHDFlowline', zoom: 13},
+  '7- North Creek (HUC08)':        {lat: 33.2366, lon: -98.3401, basinType: 'USA Val_Watersheds', level: 'USA Val_Watersheds', stream: 'NHDFlowline', zoom: 13},
+  '8- Escondido (HUC08)':          {lat: 28.875, lon: -97.8706, basinType: 'USA Val_Watersheds', level: 'USA Val_Watersheds', stream: 'NHDFlowline', zoom: 13},
+  '9- North Elm Creek (HUC08)':    {lat: 31.0126, lon: -97.0805, basinType: 'USA Val_Watersheds', level: 'USA Val_Watersheds', stream: 'NHDFlowline', zoom:12 },
+  '10- Washita (HUC08)':            {lat: 35.137, lon: -98.315, basinType: 'HUC', level: 'HUC06', stream: 'NHDFlowline', zoom: 6},
+};
+
+
+
+
+
+var ValidationData = {
+  LakeCounty: [
+    {name: 'Bull Creek', area: 6.3, lfp: 6.4, tcMean: 1.81, tcRange: [1.03, 4.62]},
+    {name: 'Terre Faire Ditch', area: 0.077, lfp: 0.33, tcMean: 0.53, tcRange: [0.12, 1.17]},
+    {name: 'Indian Creek', area: 35.7, lfp: 11.6, tcMean: 12.1, tcRange: [3.57, 23.8]},
+    {name: 'Green Lake Ditch', area: 0.06, lfp: 0.60, tcMean: 0.098, tcRange: [0.09, 0.11]},
+    {name: 'N Branch Chicago River', area: 19.7, lfp: 13.5, tcMean: 6.38, tcRange: [1.17, 18.8]},
+    {name: 'Skokie River at Lake Forest', area: 13.0, lfp: 10.8, tcMean: 2.09, tcRange: [1.04, 5.34]},
+    {name: 'Skokie River near Highland Park', area: 21.1, lfp: 16.6, tcMean: 4.75, tcRange: [1.42, 7.05]},
+    {name: 'Squaw Creek', area: 17.2, lfp: 7.8, tcMean: 12.1, tcRange: [4.03, 27.5]},
+    {name: 'Flint Creek', area: 37.0, lfp: 12.9, tcMean: 30.7, tcRange: [13.1, 57.7]}
+  ],
+  USValidation: [
+    {name: 'Cow Bayou', area: 13.1, lfp: 7.4, t0: 3.05, beta: 0.221},
+    {name: 'North Creek', area: 59.0, lfp: 18.5, t0: 4.24, beta: 0.265},
+    {name: 'Escondido', area: 22.8, lfp: 8.6, t0: 4.58, beta: 0.216},
+    {name: 'North Elm Creek', area: 119.5, lfp: 35.4, t0: 9.76, beta: 0.297},
+    {name: 'Coyote Creek', area: 282.0, lfp: 47.9, t0: 9.69, beta: 0.296}
+  ],
+  Greek: [
+    {name: 'Rafina', area: 123.3, lfp: 29.6, tcAt10mm: 3.82, t0: 5.14, beta: 0.243},
+    {name: 'Sarantapotamos', area: 143.7, lfp: 32.1, tcAt10mm: 3.48, t0: 4.74, beta: 0.232},
+    {name: 'Xerias', area: 111.5, lfp: 34.0, tcAt10mm: 3.61, t0: 4.76, beta: 0.208},
+    {name: 'Nedontas', area: 114.8, lfp: 21.6, tcAt10mm: 2.18, t0: 3.10, beta: 0.193},
+    {name: 'Achelous', area: 639.2, lfp: 41.4, tcAt10mm: 1.80, t0: 2.85, beta: 0.229},
+    {name: 'Aggitis', area: 1853.6, lfp: 59.4, tcAt10mm: 5.22, t0: 6.49, beta: 0.230},
+    {name: 'Pamisos', area: 564.1, lfp: 46.7, tcAt10mm: 3.35, t0: 4.54, beta: 0.203},
+    {name: 'Upper Peneus', area: 528.5, lfp: 38.9, tcAt10mm: 3.78, t0: 4.74, beta: 0.173},
+    {name: 'Titarisios', area: 1813.0, lfp: 93.5, tcAt10mm: 4.63, t0: 5.93, beta: 0.220},
+    {name: 'Spercheios', area: 1403.5, lfp: 78.6, tcAt10mm: 5.55, t0: 6.92, beta: 0.247},
+    {name: 'Peneus (Trikala)', area: 1372.9, lfp: 77.7, tcAt10mm: 6.07, t0: 7.26, beta: 0.223},
+    {name: 'Anavros', area: 13.9, lfp: 9.0, tcAt10mm: 0.86, t0: 1.42, beta: 0.187},
+    {name: 'Enipeus', area: 1140.5, lfp: 120.3, tcAt10mm: 6.14, t0: 7.57, beta: 0.254}
+  ]
+};
+
+// DEM — dynamic selection
+var DEM_LAYER = null;
+var elevImg;
+var DEM_SOURCE_NAME;
+
+function setDEM(demName) {
+  DEM_SOURCE_NAME = demName;
+  if (DEM_LAYER) { try { Map.remove(DEM_LAYER); } catch(e) {} }
+  if (demName === 'USGS 3DEP 10m') {
+    elevImg = ee.Image('USGS/3DEP/10m').select('elevation').rename('b1');
+    DEM_LAYER = ui.Map.Layer(elevImg, {min: 0, max: 3000, palette: ['blue', 'green', 'yellow', 'red']}, 'DEM - USGS 3DEP 10m', false);
+  } else {
+    elevImg = ee.ImageCollection('COPERNICUS/DEM/GLO30').select('DEM').mosaic().rename('b1');
+    DEM_LAYER = ui.Map.Layer(elevImg, {min: 0, max: 3000, palette: ['blue', 'green', 'yellow', 'red']}, 'DEM - Copernicus GLO30', false);
+  }
+  Map.add(DEM_LAYER);
+  print('🏔️ DEM: ' + demName);
+}
+
+setDEM('Copernicus GLO30');
+
+Map.setCenter(26.5, 41.5, 7);
+Map.style().set({ cursor: 'crosshair' });
+
+
+// ═══════════════════════════════════════════════════
+// 4. MAIN PANEL (PERSISTENT)
+// ═══════════════════════════════════════════════════
+var MAIN_PANEL = ui.Panel({
+  style: { position: 'top-right', padding: '10px', backgroundColor: 'rgba(255, 255, 255, 0.97)', width: '580px', maxHeight: '95%' }
+});
+
+MAIN_PANEL.add(ui.Label({ value: '🌊 BATU LFP + Tc CALCULATOR v1.9', style: {fontWeight: 'bold', fontSize: '16px', color: '#1a237e', margin: '0 0 8px 0'} }));
+
+var presetSelect = ui.Select({
+  items: ['-- Select Example Basin --'].concat(Object.keys(PRESET_BASINS)),
+  value: '-- Select Example Basin --',
+  style: {stretch: 'horizontal'},
+  onChange: function(selected) {
+    if (selected === '-- Select Example Basin --') return;
+    var p = PRESET_BASINS[selected];
+    if (!p) return;
+    basinTypeSelect.setValue(p.basinType, false);
+    updateBasinLevels(p.basinType);
+    basinLevelSelect.setValue(p.level, false);
+    showBasinLevelOnMap(p.level);
+    dataSourceSelect.setValue(p.stream, false);
+    configureDataSource(p.stream);
+    Map.setCenter(p.lon, p.lat, p.zoom);
+    analysisMode = 'basin';
+    findBasinButton.setLabel('⏹️ Basin Mode ACTIVE — Click to deactivate');
+    basinStatusLabel.setValue('👆 Click a point inside the basin on the map...');
+    basinStatusLabel.style().set('color', '#e65100');
+    print('📍 Preset: ' + selected + ' — click on map to analyze');
+  }
+});
+var presetRow = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0 0 3px 0'}});
+presetRow.add(ui.Label({value: '🌍 Example Basins:', style: {fontSize: '12px', fontWeight: 'bold', margin: '4px 8px 0 0'}}));
+presetRow.add(presetSelect);
+MAIN_PANEL.add(presetRow);
+
+var basinTypeSelect = ui.Select({
+  items: ['HydroSHEDS', 'HUC', 'USA Val_Watersheds','Med_Watersheds'],
+  value: 'HydroSHEDS',
+  style: {stretch: 'horizontal'},
+  onChange: function(selected) { updateBasinLevels(selected); }
+});
+var basinTypeRow = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0 0 3px 0'}});
+basinTypeRow.add(ui.Label({value: '🏔️ Basin Dataset:', style: {fontSize: '12px', fontWeight: 'bold', margin: '4px 8px 0 0'}}));
+basinTypeRow.add(basinTypeSelect);
+MAIN_PANEL.add(basinTypeRow);
+
+var BASIN_LEVEL_LAYER = null;
+var basinLevelSelect = ui.Select({
+  items: HS_LEVELS,
+  value: 'HydroSHEDS L05',
+  style: {stretch: 'horizontal'},
+  onChange: function(selected) { showBasinLevelOnMap(selected); }
+});
+
+var dataSourceSelect = ui.Select({
+  items: ['FreeFlowingRivers', 'ArcHydro', 'EU-Hydro', 'NHDFlowline'],
+  value: 'FreeFlowingRivers',
+  style: {stretch: 'horizontal'},
+  onChange: function(selected) {
+    configureDataSource(selected);
+    updateBasinType(selected);
+    removeSearchResultAndLastClick();
+    RESULTS_PANEL.clear();
+    RESULTS_PANEL.add(ui.Label({value: '📍 Click on a river segment on the map for analysis.', style: {fontSize: '11px', color: '#666'}}));
+  }
+});
+
+
+// ═══════════════════════════════════════════════════
+// 3. DATA SOURCE CONFIGURATION FUNCTION
+// ═══════════════════════════════════════════════════
+function configureDataSource(source) {
+  if (STREAM_LAYER) { try { Map.remove(STREAM_LAYER); } catch(e) {} }
+  STREAM_LAYER = null;
+  
+  if (source === 'FreeFlowingRivers') {
+    StreamData = ee.FeatureCollection(FREEFLOWINGRIVER_ASSET);
+    FIELD_ID = 'NOID'; FIELD_NEXT = 'NUOID'; FIELD_LENGTH = 'LENGTH_KM';
+    IS_DOWNSTREAM_POINTER = false; ID_IS_STRING = false; LENGTH_UNIT = 'km';
+    BASIN_FIELD = 'BAS_ID'; DATA_SOURCE_NAME = 'FreeFlowingRivers';
+  } else if (source === 'ArcHydro') {
+    StreamData = ee.FeatureCollection(ARCHYDRO_ASSET);
+    FIELD_ID = 'HydroID'; FIELD_NEXT = 'NextDownID'; FIELD_LENGTH = 'Shape_Leng';
+    IS_DOWNSTREAM_POINTER = true; ID_IS_STRING = false; LENGTH_UNIT = 'meter';
+    BASIN_FIELD = null; DATA_SOURCE_NAME = 'ArcHydro';
+  } else if (source === 'EU-Hydro') {
+    StreamData = ee.FeatureCollection(EUHYDRO_ASSET); 
+    FIELD_ID = 'OBJECT_ID'; FIELD_NEXT = 'NEXTDOWNID'; FIELD_LENGTH = 'Shape_Leng';
+    IS_DOWNSTREAM_POINTER = true; ID_IS_STRING = true; LENGTH_UNIT = 'meter';
+    BASIN_FIELD = null; DATA_SOURCE_NAME = 'EU-Hydro';
+  } else if (source === 'NHDFlowline') {
+    StreamData = ee.FeatureCollection(NHDFLOWLINE_ASSET);
+    FIELD_ID = 'NOID'; FIELD_NEXT = 'NDOID'; FIELD_LENGTH = 'lengthkm';
+    IS_DOWNSTREAM_POINTER = true; ID_IS_STRING = true; LENGTH_UNIT = 'km';
+    BASIN_FIELD = null; DATA_SOURCE_NAME = 'NHDFlowline';
+    Map.setCenter(-98.0, 39.0, 4); 
+  }
+  
+  STREAM_LAYER = ui.Map.Layer(StreamData, {color: '000000', width: 2.0}, 'Streams (' + DATA_SOURCE_NAME + ')');
+  Map.add(STREAM_LAYER);
+  
+  if (typeof demSelect !== 'undefined') {
+    if (source.indexOf('NHD') !== -1) { demSelect.setValue('USGS 3DEP 10m'); }
+    else { demSelect.setValue('Copernicus GLO30'); }
+  }
+  
+  print('📂 Data source configured: ' + DATA_SOURCE_NAME);
+}
+
+function updateBasinType(source) {
+  if (source.indexOf('NHD') !== -1) { 
+    basinTypeSelect.setValue('HUC', false); 
+    updateBasinLevels('HUC'); 
+    dataSourceSelect.setValue('NHDFlowline', false);
+    configureDataSource('NHDFlowline');
+  } else if (source.indexOf('USA Val_Watersheds') !== -1) { 
+    basinTypeSelect.setValue('USA Val_Watersheds', false); 
+    updateBasinLevels('USA Val_Watersheds');
+    dataSourceSelect.setValue('NHDFlowline', false);   
+    configureDataSource('NHDFlowline');
+  } else if (source.indexOf('Med_Watersheds') !== -1) { 
+    basinTypeSelect.setValue('Med_Watersheds', false); 
+    updateBasinLevels('Med_Watersheds');
+    dataSourceSelect.setValue('EU-Hydro', false);
+    configureDataSource('EU-Hydro');
+  } else { 
+    basinTypeSelect.setValue('HydroSHEDS', false); 
+    updateBasinLevels('HydroSHEDS'); 
+  }
+}
+
+function updateBasinLevels(basinType) {
+  if (basinType === 'HUC') { 
+    basinLevelSelect.items().reset(HUC_LEVELS); 
+    basinLevelSelect.setValue('HUC08');     
+    dataSourceSelect.setValue('NHDFlowline', false);
+    configureDataSource('NHDFlowline');
+    showBasinLevelOnMap('HUC08'); 
+  } else if (basinType === 'USA Val_Watersheds') { 
+    basinLevelSelect.items().reset(USA_Val); 
+    basinLevelSelect.setValue('USA Val_Watersheds'); 
+    showBasinLevelOnMap('USA Val_Watersheds');
+    dataSourceSelect.setValue('NHDFlowline', false);
+    configureDataSource('NHDFlowline');
+  } else if (basinType === 'Med_Watersheds') { 
+    basinLevelSelect.items().reset(MEDITERRANIAN_Val); 
+    basinLevelSelect.setValue('Med_Watersheds'); 
+    showBasinLevelOnMap('Med_Watersheds');
+    dataSourceSelect.setValue('EU-Hydro', false);
+    configureDataSource('EU-Hydro');
+  } else { 
+    basinLevelSelect.items().reset(HS_LEVELS); 
+  }
+}
+
+function showBasinLevelOnMap(levelName) {
+  if (BASIN_LEVEL_LAYER) { try { Map.remove(BASIN_LEVEL_LAYER); } catch(e) {} }
+  BASIN_LEVEL_LAYER = null;
+  var path = BASIN_PATHS[levelName];
+  if (path) {
+    var fc = ee.FeatureCollection(path);
+    BASIN_LEVEL_LAYER = ui.Map.Layer(
+      fc.style({color: '#7B1FA2', fillColor: '#7B1FA208', width: 3}),
+      {}, levelName, true
+    );
+    Map.add(BASIN_LEVEL_LAYER);
+  }
+}
+
+var basinRow = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0 0 3px 0'}});
+basinRow.add(ui.Label({value: '🗺️ Basin Dataset Level:', style: {fontSize: '12px', fontWeight: 'bold', margin: '4px 8px 0 0'}}));
+basinRow.add(basinLevelSelect);
+MAIN_PANEL.add(basinRow);
+
+var selectRow = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0 0 3px 0'}});
+selectRow.add(ui.Label({value: '📂 Stream Data Source:', style: {fontSize: '12px', fontWeight: 'bold', margin: '4px 8px 0 0'}}));
+selectRow.add(dataSourceSelect);
+MAIN_PANEL.add(selectRow);
+
+var demSelect = ui.Select({
+  items: ['Copernicus GLO30', 'USGS 3DEP 10m'],
+  value: 'Copernicus GLO30',
+  style: {stretch: 'horizontal'},
+  onChange: function(selected) { setDEM(selected); }
+});
+var demRow = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0 0 3px 0'}});
+demRow.add(ui.Label({value: '🏔️ DEM Source:', style: {fontSize: '12px', fontWeight: 'bold', margin: '4px 8px 0 0'}}));
+demRow.add(demSelect);
+MAIN_PANEL.add(demRow);
+
+var basinStatusLabel = ui.Label({value: '', style: {fontSize: '11px', color: '#1565c0', fontWeight: 'bold', margin: '2px 0 0 0'}});
+var findBasinButton = ui.Button({
+  label: '🔍 Find Basin → LFP, Tc & Streams',
+  style: {stretch: 'horizontal', margin: '2px 0 0 0', color: '#1565c0'},
+  onClick: function() {
+    if (analysisMode === 'browse') {
+      analysisMode = 'basin';
+      findBasinButton.setLabel('⏹️ Basin Mode ACTIVE — Click to deactivate');
+      basinStatusLabel.setValue('👆 Click a point inside the basin on the map...');
+      basinStatusLabel.style().set('color', '#e65100');
+    } else if (analysisMode === 'basin') {
+      analysisMode = 'segment';
+      findBasinButton.setLabel('🔀 Segment Mode — Click to deactivate');
+      basinStatusLabel.setValue('👆 Click on a stream segment for analysis...');
+      basinStatusLabel.style().set('color', '#1565c0');
+    } else {
+      analysisMode = 'browse';
+      findBasinButton.setLabel('🔍 Find Basin → LFP, Tc & Streams');
+      basinStatusLabel.setValue('');
+      basinStatusLabel.style().set('color', '#666');
+    }
+  }
+});
+MAIN_PANEL.add(findBasinButton);
+MAIN_PANEL.add(basinStatusLabel);
+
+MAIN_PANEL.add(ui.Panel({style: {backgroundColor: '#1565c0', height: '2px', margin: '5px 0', stretch: 'horizontal'}}));
+
+var RESULTS_PANEL = ui.Panel({style: {margin: '0'}});
+RESULTS_PANEL.add(ui.Label({value: '📍 Click on a river segment on the map for analysis.', style: {fontSize: '11px', color: '#666'}}));
+MAIN_PANEL.add(RESULTS_PANEL);
+
+Map.add(MAIN_PANEL);
+
+configureDataSource('FreeFlowingRivers');
+showBasinLevelOnMap('HydroSHEDS L05');
+
+// ═══════════════════════════════════════════════════
+// 5. TIME OF CONCENTRATION CALCULATOR
+// ═══════════════════════════════════════════════════
+
+var TcCalculator = {
+  areaRanges: {
+    'Kirpich (1940)': {min: 0, max: 0.45, desc: '< 0.45 km²'},
+    'Kirpich (10-85 slope)': {min: 0, max: 0.45, desc: '< 0.45 km²'},
+    'Bransby-Williams (1922)': {min: 0, max: 130, desc: '< 130 km²'},
+    'NRCS Lag (CN=70)': {min: 0, max: 24, desc: '< 24 km²'},
+    'NRCS Lag (CN=80)': {min: 0, max: 24, desc: '< 24 km²'},
+    'Giandotti (1934)': {min: 170, max: 70000, desc: '170-70,000 km²'},
+    'Témez (1978)': {min: 1, max: 3000, desc: '1-3,000 km²'},
+    'Passini': {min: 50, max: 5000, desc: '50-5,000 km²'},
+    'Ventura': {min: 50, max: 2000, desc: '50-2,000 km²'},
+    'Johnstone-Cross (1949)': {min: 100, max: 5000, desc: '100-5,000 km²'},
+    'Michailidi Variable Tc': {min: 10, max: 2000, desc: '10-2,000 km²'},
+    'Izzard (1946)': {min: 0, max: 0.01, desc: '< 0.01 km² (overland flow)'},
+    'US ACE (1954)': {min: 0, max: 0.05, desc: '< 0.05 km² (airfield drainage)'},
+    'Morgali-Linsley (1965)': {min: 0, max: 0.01, desc: '< 0.01 km² (paved overland)'},
+    'Askew (1970)': {min: 0.4, max: 90, desc: '0.4-90 km²'},
+    'Kadoya-Fukushima (1977)': {min: 0.5, max: 143, desc: '0.5-143 km²'},
+    'Papadakis-Kazan (1987)': {min: 0, max: 2, desc: '< 2 km² (small rural)'},
+    'Aron et al. (1991)': {min: 0, max: 50, desc: '< 50 km²'},
+    'Loukas-Quick (1996)': {min: 10, max: 500, desc: '10-500 km² (forested mountain)'},
+    'Snyder (1938)': {min: 25, max: 25000, desc: '25-25,000 km²'}
+  },
+
+  isMethodSuitable: function(methodName, areaKm2) {
+    var range = this.areaRanges[methodName];
+    if (!range) return true;
+    return areaKm2 >= range.min && areaKm2 <= range.max;
+  },
+
+  // ── Kirpich (1940) ── US units (L ft, S m/m) → Tc minutes
+  kirpich: function(L_m, S) {
+    var L_ft = L_m * 3.28084;
+    if (S <= 0) S = 0.0001;
+    var Tc = 0.0078 * Math.pow(L_ft, 0.77) * Math.pow(S, -0.385);
+    return { value: Tc, unit: 'min', method: 'Kirpich (1940)', notes: 'Small rural watersheds' };
+  },
+
+  // ── Bransby-Williams (1922) ── Tc minutes
+  bransbyWilliams: function(L_km, A_km2, S_m_per_km) {
+    if (S_m_per_km <= 0) S_m_per_km = 0.001;
+    if (A_km2 <= 0) A_km2 = 0.01;
+    var Fc = 58.5;
+    var Tc = (Fc * L_km) / (Math.pow(A_km2, 0.1) * Math.pow(S_m_per_km, 0.2));
+    return { value: Tc, unit: 'min', method: 'Bransby-Williams (1922)', notes: 'Large natural watersheds' };
+  },
+
+  // ── NRCS / SCS Lag (Mockus 1961) ── L ft, Y %, CN → Tc minutes
+  // Lag (h) = L^0.8 * (S+1)^0.7 / (1900 * Y^0.5)   [S = 1000/CN - 10]
+  // Tc = Lag / 0.6
+  nrcsLag: function(L_ft, Y_percent, CN) {
+    if (CN < 50) CN = 50;
+    if (CN > 98) CN = 98;
+    if (Y_percent <= 0) Y_percent = 0.01;
+    var S = (1000 / CN) - 10;
+    var Lag_h = Math.pow(L_ft, 0.8) * Math.pow(S + 1, 0.7) / (1900 * Math.pow(Y_percent, 0.5));
+    var Tc_h = Lag_h / 0.6;
+    return { value: Tc_h * 60, unit: 'min', method: 'NRCS Lag (CN=' + CN + ')', notes: 'SCS Lag equation, requires CN' };
+  },
+
+  // ── Giandotti (1934) ── Tc hours → minutes
+  giandotti: function(A_km2, L_km, H_avg_m, H_outlet_m) {
+    var deltaH = H_avg_m - H_outlet_m;
+    if (deltaH <= 0) deltaH = 1;
+    var Tc_h = (4 * Math.sqrt(A_km2) + 1.5 * L_km) / (0.8 * Math.sqrt(deltaH));
+    return { value: Tc_h * 60, unit: 'min', method: 'Giandotti (1934)', notes: 'Mountain basins, 170-70000 km²' };
+  },
+
+  // ── Johnstone & Cross (1949) ── L miles, S m/m → Tc minutes
+  johnstoneCross: function(L_miles, S) {
+    if (S <= 0) S = 0.0001;
+    var S_ft_per_mile = S * 5280;
+    var Tc = 300 * L_miles / Math.sqrt(S_ft_per_mile);
+    return { value: Tc, unit: 'min', method: 'Johnstone-Cross (1949)', notes: 'Large basins 64-4200 km²' };
+  },
+
+  // ── Témez (1978) ── L km, S m/m → Tc hours → minutes
+  temez: function(L_km, S) {
+    if (S <= 0) S = 0.0001;
+    var Tc_h = 0.3 * Math.pow(L_km / Math.pow(S, 0.25), 0.76);
+    return { value: Tc_h * 60, unit: 'min', method: 'Témez (1978)', notes: 'Spain, 1-3000 km²' };
+  },
+
+  // ── Passini ── Tc hours → minutes
+  passini: function(A_km2, L_km, S) {
+    if (S <= 0) S = 0.0001;
+    var Tc_h = 0.108 * Math.pow(A_km2 * L_km, 1/3) / Math.sqrt(S);
+    return { value: Tc_h * 60, unit: 'min', method: 'Passini', notes: 'Larger watersheds 50-5000 km²' };
+  },
+
+  // ── Ventura ── Tc hours → minutes
+  ventura: function(A_km2, S) {
+    if (S <= 0) S = 0.0001;
+    var Tc_h = 0.127 * Math.sqrt(A_km2 / S);
+    return { value: Tc_h * 60, unit: 'min', method: 'Ventura', notes: 'Area-based method' };
+  },
+
+  // ══════════════════════════════════════════════════════
+  // IZZARD (1946) — CORRECTED (v1.1)
+  // Formula from Michailidi et al. (2018) Table 1, SI units:
+  //   tc (min) = 3.46 * (0.0007*i + cr) * L_km^(1/3) / (J^(1/3) * i^(2/3))
+  // where i = rainfall intensity (mm/h), L in km, J = slope (m/m)
+  // Valid for: overland / road surfaces, product i*L < 500 (i in/h, L ft)
+  // ══════════════════════════════════════════════════════
+  izzard: function(L_m, S, i_mm_h, cr) {
+    if (!cr) cr = 0.007;
+    if (i_mm_h <= 0) i_mm_h = 10;
+    if (S <= 0) S = 0.0001;
+    var L_km = L_m / 1000;
+    var Tc_min = 3.46 * (0.0007 * i_mm_h + cr) * Math.pow(L_km, 1.0/3.0) /
+                 (Math.pow(S, 1.0/3.0) * Math.pow(i_mm_h, 2.0/3.0));
+    return { value: Tc_min, unit: 'min', method: 'Izzard (1946)',
+             notes: 'Overland flow, i=' + i_mm_h.toFixed(1) + ' mm/h, cr=' + cr };
+  },
+
+  // ── US ACE (1954) ── L m, S m/m, i mm/h → Tc minutes
+  // Morgali-Linsley structure with different exponent on i (0.43 per Michailidi Table 1)
+  // Using 0.43 for i exponent as per the original US ACE airfield formula
+  usACE: function(L_m, S, i_mm_h, n) {
+    if (!n) n = 0.025;
+    if (i_mm_h <= 0) i_mm_h = 10;
+    if (S <= 0) S = 0.0001;
+    // Michailidi Table 1: tc = [160/(10.57 + 0.12/S)] * L^(3/0.48) ... 
+    // simplified empirical form; use Morgali-Linsley structure with n=0.025 (concrete/paved)
+    var Tc_min = 6.92 * Math.pow(n * L_m, 0.6) / (Math.pow(i_mm_h, 0.4) * Math.pow(S, 0.3));
+    return { value: Tc_min, unit: 'min', method: 'US ACE (1954)',
+             notes: 'Airfield drainage, i=' + i_mm_h.toFixed(1) + ' mm/h, n=' + n };
+  },
+
+  // ── Morgali & Linsley (1965) ── L m, J m/m, i mm/h → Tc minutes
+  // tc (h) = 0.12 * n^0.6 * L^0.6 / (J^0.3 * i^0.4)   [Michailidi Table 1]
+  morgaliLinsley: function(L_m, J, i_mm_h, n) {
+    if (!n) n = 0.035;
+    if (i_mm_h <= 0) i_mm_h = 10;
+    if (J <= 0) J = 0.0001;
+    var Tc_h = 0.12 * Math.pow(n, 0.6) * Math.pow(L_m, 0.6) /
+               (Math.pow(J, 0.3) * Math.pow(i_mm_h, 0.4));
+    return { value: Tc_h * 60, unit: 'min', method: 'Morgali-Linsley (1965)',
+             notes: 'Overland flow (Manning), i=' + i_mm_h.toFixed(1) + ' mm/h' };
+  },
+
+  // ── Askew (1970) ── L km, J m/m, A km², iE mm/h → Tc minutes
+  askew: function(L_km, J, A_km2, iE_mm_h) {
+    if (J <= 0) J = 0.0001;
+    if (iE_mm_h <= 0) iE_mm_h = 10;
+    var qwm = iE_mm_h * A_km2 / 3.6;
+    if (qwm <= 0) qwm = 0.01;
+    var tlag_h = 0.877 * Math.pow(L_km, 0.80) * Math.pow(J, -0.33) * Math.pow(qwm, -0.23);
+    var Tc_h = tlag_h / 0.6;
+    return { value: Tc_h * 60, unit: 'min', method: 'Askew (1970)',
+             notes: 'Variable lag, iE=' + iE_mm_h.toFixed(1) + ' mm/h' };
+  },
+
+  // ── Kadoya & Fukushima (1977) ── A km², iE mm/h, CT mm → Tc minutes
+  kadoyaFukushima: function(A_km2, iE_mm_h, CT) {
+    if (!CT) CT = 250;
+    if (iE_mm_h <= 0) iE_mm_h = 10;
+    var Tc_h = (160.0 / CT) * Math.pow(A_km2, 0.22) * Math.pow(iE_mm_h, -0.35);
+    return { value: Tc_h * 60, unit: 'min', method: 'Kadoya-Fukushima (1977)',
+             notes: 'Storage model, iE=' + iE_mm_h.toFixed(1) + ' mm/h, CT=' + CT + ' mm' };
+  },
+
+  // ── Papadakis & Kazan (1987) ── L km, J m/m, iE mm/h → Tc minutes
+  papadakisKazan: function(L_km, J, iE_mm_h, n) {
+    if (!n) n = 0.035;
+    if (iE_mm_h <= 0) iE_mm_h = 10;
+    if (J <= 0) J = 0.0001;
+    var Tc_h = 2.154 * Math.pow(n, 0.52) * Math.pow(L_km, 0.5) /
+               (Math.pow(J, 0.31) * Math.pow(iE_mm_h, 0.38));
+    return { value: Tc_h * 60, unit: 'min', method: 'Papadakis-Kazan (1987)',
+             notes: 'Small rural, iE=' + iE_mm_h.toFixed(1) + ' mm/h' };
+  },
+
+  // ── Aron et al. (1991) ── swale flow
+  aronEtAl: function(L_m, A_km2, J, iE_mm_h, n, b_m) {
+    if (!n) n = 0.035;
+    if (!b_m) b_m = 10;
+    if (iE_mm_h <= 0) iE_mm_h = 10;
+    if (J <= 0) J = 0.0001;
+    var L_km = L_m / 1000;
+    var k = L_km / Math.pow(A_km2, 0.6);
+    var y_est = 0.5;
+    var c = Math.sqrt(y_est / b_m);
+    if (c <= 0) c = 0.2;
+    var tlag_h = 0.0155 * Math.pow(k, 0.42) * Math.pow(n, 0.75) * Math.pow(L_m, 0.58) /
+                 (Math.pow(c, 0.5) * Math.pow(J, 0.38) * Math.pow(iE_mm_h, 0.25));
+    var Tc_h = tlag_h / 0.6;
+    return { value: Tc_h * 60, unit: 'min', method: 'Aron et al. (1991)',
+             notes: 'Swale flow, iE=' + iE_mm_h.toFixed(1) + ' mm/h, k=' + k.toFixed(2) };
+  },
+
+  // ── Loukas & Quick (1996) ── forested mountain
+  loukasQuick: function(L_km, A_km2, J, iE_mm_h, Kav, b_m) {
+    if (!Kav) Kav = 10;
+    if (!b_m) b_m = 10;
+    if (iE_mm_h <= 0) iE_mm_h = 10;
+    if (J <= 0) J = 0.0001;
+    var B = L_km / Math.pow(A_km2, 0.6);
+    var y_est = 0.5;
+    var k = Math.sqrt(y_est / b_m);
+    if (k <= 0) k = 0.2;
+    var tlag_h = 0.072 * Math.pow(B, 0.6) /
+                 (Math.pow(k, 0.4) * Math.pow(Kav, 0.2) * Math.pow(J, 0.2) * Math.pow(iE_mm_h, 0.20));
+    var Tc_h = tlag_h / 0.6;
+    return { value: Tc_h * 60, unit: 'min', method: 'Loukas-Quick (1996)',
+             notes: 'Forested mountain, iE=' + iE_mm_h.toFixed(1) + ' mm/h, Kav=' + Kav + ' mm/h' };
+  },
+
+  // ── Snyder (1938) ── synthetic unit hydrograph
+  snyder: function(L_km, Lca_km, A_km2, Ct, Cp) {
+    if (!Ct) Ct = 2.0;
+    if (!Cp) Cp = 0.6;
+    if (!Lca_km) Lca_km = L_km * 0.5;
+    var L_miles = L_km * 0.621371;
+    var Lca_miles = Lca_km * 0.621371;
+    var tL = Ct * Math.pow(L_miles * Lca_miles, 0.3);
+    var Tc_h = tL / 0.6;
+    return { value: Tc_h * 60, unit: 'min', method: 'Snyder (1938)',
+             notes: 'Synthetic UH, Ct=' + Ct + ', Lca≈0.5L' };
+  },
+
+  // ══════════════════════════════════════════════════════
+  // MICHAILIDI et al. (2018) VARIABLE Tc
+  // Regional formulas — Equations (7) & (8) from paper:
+  //   t0 = 9.00 * n * A^0.028 * L^0.216 * b^0.081 * J^(-0.500)
+  //   β  = 0.40 − 0.80 * A^0.186 * L^(−0.500) * b^(−0.356)
+  //   tc = t0 * ie^(−β)
+  // Units: A km², L km, b m, J m/m, ie mm/h → tc hours
+  // ══════════════════════════════════════════════════════
+  michailidiVariableTc: function(A_km2, L_km, S, iEffective_mm_h, n, b_m) {
+    if (!n) n = 0.035;
+    if (!b_m) b_m = Math.pow(A_km2 * 1000000, 0.5) / L_km;
+    if (S <= 0) S = 0.0001;
+    if (iEffective_mm_h <= 0) iEffective_mm_h = 10;
+    var t0 = 9.00 * n * Math.pow(A_km2, 0.028) * Math.pow(L_km, 0.216) *
+             Math.pow(b_m, 0.081) * Math.pow(S, -0.500);
+    var beta = 0.40 - 0.80 * Math.pow(A_km2, 0.186) * Math.pow(L_km, -0.500) * Math.pow(b_m, -0.356);
+    if (beta < 0.126) beta = 0.126;
+    if (beta > 0.264) beta = 0.264;
+    var Tc_h = t0 * Math.pow(iEffective_mm_h, -beta);
+    return {
+      value: Tc_h * 60, unit: 'min', method: 'Michailidi Variable Tc',
+      notes: 'TC varies with rainfall intensity (ie=' + iEffective_mm_h.toFixed(1) + 'mm/h, β=' + beta.toFixed(3) + ')',
+      parameters: { t0: t0.toFixed(2), beta: beta.toFixed(3), iEffective: iEffective_mm_h, channelWidth: b_m.toFixed(1) }
+    };
+  },
+
+  // ── 10-85% slope from longitudinal profile
+  calculate1085Slope: function(profileData) {
+    if (!profileData || profileData.length < 10) return null;
+    var totalLength = profileData[profileData.length - 1].distance;
+    var dist10 = totalLength * 0.10;
+    var dist85 = totalLength * 0.85;
+    var elev10 = null, elev85 = null;
+    for (var i = 0; i < profileData.length; i++) {
+      if (elev10 === null && profileData[i].distance >= dist10) { elev10 = profileData[i].elevation; }
+      if (profileData[i].distance >= dist85) { elev85 = profileData[i].elevation; break; }
+    }
+    if (elev10 !== null && elev85 !== null) {
+      return { slope: (elev10 - elev85) / (dist85 - dist10), elev10: elev10, elev85: elev85 };
+    }
+    return null;
+  },
+
+  validateWithLiterature: function(calculatedLfp, calculatedTc, basinArea, michailidiParams, basinDataset) {
+    var validation = { LakeCounty: null, USValidation: null, Greek: null };
+
+    // Determine which validation sets apply for this dataset
+    var isUSA = (basinDataset === 'USA Val_Watersheds') ||
+                (basinDataset && basinDataset.indexOf('HUC') !== -1);
+    var isMed = (basinDataset === 'Med_Watersheds');
+
+    // No matching dataset → return empty (e.g. FreeFlowingRivers, ArcHydro, HydroSHEDS)
+    if (!isUSA && !isMed) return validation;
+
+    var compT0   = michailidiParams ? parseFloat(michailidiParams.t0)   : 0;
+    var compBeta = michailidiParams ? parseFloat(michailidiParams.beta) : 0;
+    var compTcPe10 = (compT0 > 0 && compBeta > 0 && compBeta < 1)
+      ? Math.pow(compT0, 1/(1-compBeta)) * Math.pow(10, -compBeta/(1-compBeta)) : 0;
+
+    // ── LakeCounty (USA only) ──────────────────────────────────────────
+    if (isUSA) {
+      var lakeCountyMatch = null; var minAreaDiff = Infinity;
+      ValidationData.LakeCounty.forEach(function(basin) {
+        var d = Math.abs(basin.area - basinArea);
+        if (d < minAreaDiff) { minAreaDiff = d; lakeCountyMatch = basin; }
+      });
+      if (lakeCountyMatch && minAreaDiff < basinArea * 0.5) {
+        var lfpErr  = Math.abs(calculatedLfp - lakeCountyMatch.lfp) / lakeCountyMatch.lfp * 100;
+        var tcErr   = Math.abs(calculatedTc / 60 - lakeCountyMatch.tcMean) / lakeCountyMatch.tcMean * 100;
+        var inRange = calculatedTc / 60 >= lakeCountyMatch.tcRange[0] &&
+                      calculatedTc / 60 <= lakeCountyMatch.tcRange[1];
+        validation.LakeCounty = {
+          matchedBasin: lakeCountyMatch,
+          compLfp: calculatedLfp.toFixed(1),
+          compTcH: (calculatedTc / 60).toFixed(2),
+          lfpError: lfpErr.toFixed(1), tcError: tcErr.toFixed(1),
+          tcInRange: inRange,
+          quality: lfpErr < 25 && tcErr < 50 ? 'Good' : lfpErr < 50 && tcErr < 100 ? 'Fair' : 'Poor'
+        };
+      }
+    }
+
+    // ── US Validation (USA only) ───────────────────────────────────────
+    if (isUSA) {
+      var usMatch = null; var minUsAreaDiff = Infinity;
+      ValidationData.USValidation.forEach(function(basin) {
+        var d = Math.abs(basin.area - basinArea);
+        if (d < minUsAreaDiff) { minUsAreaDiff = d; usMatch = basin; }
+      });
+      if (usMatch && minUsAreaDiff < basinArea * 0.5) {
+        var litTcPe10  = Math.pow(usMatch.t0, 1/(1-usMatch.beta)) * Math.pow(10, -usMatch.beta/(1-usMatch.beta));
+        var usLfpErr   = Math.abs(calculatedLfp - usMatch.lfp) / usMatch.lfp * 100;
+        var usTcErr    = compTcPe10 > 0 ? Math.abs(compTcPe10 - litTcPe10) / litTcPe10 * 100 : 999;
+        var usT0Err    = compT0 > 0 ? Math.abs(compT0 - usMatch.t0) / usMatch.t0 * 100 : 999;
+        var usBetaErr  = compBeta > 0 ? Math.abs(compBeta - usMatch.beta) / usMatch.beta * 100 : 999;
+        validation.USValidation = {
+          matchedBasin: usMatch,
+          compLfp: calculatedLfp.toFixed(1),
+          lfpError: usLfpErr.toFixed(1), tcError: usTcErr.toFixed(1),
+          litTcPe10: litTcPe10.toFixed(2), compTcPe10: compTcPe10.toFixed(2),
+          compT0: compT0.toFixed(2), compBeta: compBeta.toFixed(3),
+          t0Error: usT0Err.toFixed(1), betaError: usBetaErr.toFixed(1),
+          quality: usLfpErr < 25 && usTcErr < 50 ? 'Good' : usLfpErr < 50 && usTcErr < 100 ? 'Fair' : 'Poor'
+        };
+      }
+    }
+
+    // ── Greek Validation (Mediterranean only) ─────────────────────────
+    if (isMed) {
+      var grMatch = null; var minGrAreaDiff = Infinity;
+      ValidationData.Greek.forEach(function(basin) {
+        var d = Math.abs(basin.area - basinArea);
+        if (d < minGrAreaDiff) { minGrAreaDiff = d; grMatch = basin; }
+      });
+      if (grMatch && minGrAreaDiff < basinArea * 0.5) {
+        var grLfpErr  = Math.abs(calculatedLfp - grMatch.lfp) / grMatch.lfp * 100;
+        var grTcErr   = compTcPe10 > 0 ? Math.abs(compTcPe10 - grMatch.tcAt10mm) / grMatch.tcAt10mm * 100 : 999;
+        var grT0Err   = compT0 > 0 ? Math.abs(compT0 - grMatch.t0) / grMatch.t0 * 100 : 999;
+        var grBetaErr = compBeta > 0 ? Math.abs(compBeta - grMatch.beta) / grMatch.beta * 100 : 999;
+        validation.Greek = {
+          matchedBasin: grMatch,
+          compLfp: calculatedLfp.toFixed(1),
+          lfpError: grLfpErr.toFixed(1), tcError: grTcErr.toFixed(1),
+          litTcPe10: grMatch.tcAt10mm.toFixed(2), compTcPe10: compTcPe10.toFixed(2),
+          compT0: compT0.toFixed(2), compBeta: compBeta.toFixed(3),
+          t0Error: grT0Err.toFixed(1), betaError: grBetaErr.toFixed(1),
+          quality: grLfpErr < 25 && grTcErr < 50 ? 'Good' : grLfpErr < 50 && grTcErr < 100 ? 'Fair' : 'Poor'
+        };
+      }
+    }
+
+    return validation;
+  }
+};
+
+// ═══════════════════════════════════════════════════
+// 6. HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════
+
+function normalizeId(val) {
+  if (val === null || val === undefined) return null;
+  if (DATA_SOURCE_NAME === 'EU-Hydro') {
+    var strValEU = String(val).trim();
+    if (strValEU === '' || strValEU === '0' || strValEU === '-1' || strValEU === '0.0') return null; 
+    if (strValEU.indexOf('e+') === -1) { if (strValEU.slice(-2) === '.0') return strValEU.slice(0, -2); return strValEU; }
+    try { var numEU = Number(val); if (isNaN(numEU)) return strValEU; return numEU.toFixed(0); } catch (e) { return strValEU; }
+  }
+  if (typeof val === 'string' && val.indexOf('e+') === -1) { return val.trim(); }
+  try { var num = Number(val); if (isNaN(num)) return String(val).trim(); return num.toFixed(0); } catch (e) { return String(val).trim(); }
+}
+
+var getProfileFast = function(segmentsFC, offsetDict, elevImage, samplingStep) {
+  var segmentsList = segmentsFC.toList(segmentsFC.size());
+  var profilePoints = segmentsList.map(function(f) {
+    var feature = ee.Feature(f);
+    var idStr = ee.String(feature.get('ID_STR')); 
+    var startDistM = ee.Number(offsetDict.get(idStr)); 
+    var geom = feature.geometry(); var length = geom.length();
+    var distances = ee.List.sequence(0, length, samplingStep);
+    var lines = geom.cutLines(distances, 5).geometries();
+    var zipped = lines.zip(distances);
+    return zipped.map(function(pair) {
+      var l = ee.List(pair); var ptGeom = ee.Geometry(l.get(0));
+      var pt = ee.Geometry.Point(ptGeom.coordinates().get(0));
+      var localDist = ee.Number(l.get(1)); var globalDist = startDistM.add(localDist);
+      return ee.Feature(pt, {'distance': globalDist});
+    });
+  }).flatten(); 
+  var pointsFC = ee.FeatureCollection(profilePoints);
+  var profileWithElev = elevImage.reduceRegions({ collection: pointsFC, reducer: ee.Reducer.first(), scale: 30, tileScale: 4 });
+  return profileWithElev.filter(ee.Filter.notNull(['first']));
+};
+
+function buildUpstreamLookup(ids, nextDownIds) {
+  var upstreamLookup = {};
+  for (var i = 0; i < ids.length; i++) { var key = normalizeId(ids[i]); if (key) { upstreamLookup[key] = []; } }
+  var connections = 0; var nullConnections = 0;
+  if (IS_DOWNSTREAM_POINTER) {
+    for (var j = 0; j < ids.length; j++) {
+      var segId = normalizeId(ids[j]); var downstreamRaw = nextDownIds[j];
+      if (downstreamRaw !== null && downstreamRaw !== undefined && downstreamRaw !== '') {
+        var downstreamList = []; var dsString = String(downstreamRaw); 
+        if (DATA_SOURCE_NAME === 'EU-Hydro') { dsString = dsString.trim(); downstreamList = dsString.split(/[_,\s;]+/); }
+        else { if (dsString.indexOf('_') !== -1) { downstreamList = dsString.split('_'); } else { downstreamList = [dsString]; } }
+        downstreamList.forEach(function(dsVal) { var downKey = normalizeId(dsVal); if (downKey && upstreamLookup[downKey] !== undefined) { upstreamLookup[downKey].push(segId); connections++; } });
+      } else { nullConnections++; }
+    }
+  } else {
+    for (var k = 0; k < ids.length; k++) {
+      var currentId = normalizeId(ids[k]); var upstreamValue = nextDownIds[k];
+      if (upstreamValue !== null && upstreamValue !== undefined && upstreamValue !== '') {
+        var upstreamIdList = []; var upString = String(upstreamValue);
+        if (DATA_SOURCE_NAME === 'EU-Hydro') { upString = upString.trim(); upstreamIdList = upString.split(/[_,\s;]+/); }
+        else { if (upString.indexOf('_') !== -1) { upstreamIdList = upString.split('_'); } else { upstreamIdList = [upString]; } }
+        upstreamIdList.forEach(function(upId) { var upKey = normalizeId(upId); if (upKey && upstreamLookup[currentId] && upstreamLookup[upKey] !== undefined) { upstreamLookup[currentId].push(upKey); connections++; } });
+      } else { nullConnections++; }
+    }
+  }
+  if (DATA_SOURCE_NAME && DATA_SOURCE_NAME.indexOf('NHD') !== -1) { print('🔧 Connection count: ' + connections + ' (Normalized)'); }
+  return upstreamLookup;
+}
+
+function findOutletSegment(allNormalizedIds, segmentMap, upstreamLookup) {
+  var idSet = {}; allNormalizedIds.forEach(function(id) { idSet[id] = true; });
+  var downstreamOf = {};
+  allNormalizedIds.forEach(function(id) { var ups = upstreamLookup[id] || []; ups.forEach(function(upId) { if (idSet[upId]) { if (!downstreamOf[upId]) downstreamOf[upId] = []; downstreamOf[upId].push(id); } }); });
+  var outlets = allNormalizedIds.filter(function(id) { return !downstreamOf[id] || downstreamOf[id].length === 0; });
+  if (outlets.length === 0) return allNormalizedIds[0];
+  if (outlets.length === 1) return outlets[0];
+  var best = outlets[0]; var bestCount = 0;
+  outlets.forEach(function(outId) { var visited = {}; var q = [outId]; var count = 0; while (q.length > 0) { var c = q.shift(); if (visited[c]) continue; visited[c] = true; count++; (upstreamLookup[c] || []).forEach(function(u) { if (idSet[u] && !visited[u]) q.push(u); }); } if (count > bestCount) { bestCount = count; best = outId; } });
+  print('🔍 Outlet found: ' + best + ' (' + outlets.length + ' candidates, best has ' + bestCount + ' upstream)');
+  return best;
+}
+
+// ═══════════════════════════════════════════════════
+// 7. UI PANEL CREATION (Results)
+// ═══════════════════════════════════════════════════
+
+var createAnalysisPanel = function(stats, tcResults, chartWidget, validationResults) {
+  var panel = ui.Panel({style: {margin: '0'}});
+  panel.add(ui.Label({ value: '⛰️ HYDROLOGICAL ANALYSIS (' + DATA_SOURCE_NAME + ')', style: {fontWeight: 'bold', fontSize: '14px', color: '#1a237e', margin: '0 0 4px 0'} }));
+  var statsPanel = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0 0 1px 0'}});
+  var leftStats = ui.Panel({style: {width: '50%', padding: '0'}});
+  leftStats.add(ui.Label('📏 Length(Geom): ' + stats.lengthGeomKm + ' km | (Attr): ' + stats.lengthKm + ' km', {fontSize: '11px', fontWeight: 'bold', margin: '0', padding: '0'}));
+  leftStats.add(ui.Label('📐 Avg Slope: ' + (stats.avgSlope * 100).toFixed(3) + ' %', {fontSize: '12px', margin: '0', padding: '0'}));
+  leftStats.add(ui.Label('📐 10-85 Slope: ' + (stats.slope1085 ? (stats.slope1085 * 100).toFixed(3) + ' %' : 'N/A'), {fontSize: '12px', margin: '0', padding: '0'}));
+  var rightStats = ui.Panel({style: {width: '50%', padding: '0'}});
+  rightStats.add(ui.Label('⬆️ Max Elev: ' + stats.maxElev.toFixed(0) + ' m', {fontSize: '12px', margin: '0', padding: '0'}));
+  rightStats.add(ui.Label('⬇️ Min Elev: ' + stats.minElev.toFixed(0) + ' m', {fontSize: '12px', margin: '0', padding: '0'}));
+  rightStats.add(ui.Label('📊 Relief: ' + stats.elevDiff.toFixed(0) + ' m', {fontSize: '12px', margin: '0', padding: '0'}));
+  statsPanel.add(leftStats); statsPanel.add(rightStats); panel.add(statsPanel);
+  var areaInfo = '🗺️ Basin Area: ' + (stats.area ? stats.area.toFixed(2) : 'N/A') + ' km²';
+  if (stats.areaGeom) areaInfo += ' | Geom: ' + stats.areaGeom.toFixed(2) + ' km²';
+  if (stats.basinMethod) areaInfo += ' (' + stats.basinMethod + ')';
+  panel.add(ui.Label({ value: areaInfo, style: {fontSize: '12px', fontWeight: 'bold', color: '#1565c0', margin: '0 0 0px 0'} }));
+  var networkInfo = '🔗 Upstream: ' + (stats.upstreamCount || 'N/A') + ' segments | LFP: ' + (stats.lfpSegmentCount || 'N/A') + ' segments';
+  panel.add(ui.Label({ value: networkInfo, style: {fontSize: '10px', color: '#666', margin: '0 0 2px 0'} }));
+  
+  // ── helper: find top-3 Tc methods closest to a target (hours) ──
+  var findBestTcMatch = function(tcResultsArr, litTcHours) {
+    var litMin = litTcHours * 60;
+    var scored = tcResultsArr.map(function(tc) {
+      return { method: tc.method, tcH: (tc.value / 60).toFixed(2),
+               errPct: Math.abs(tc.value - litMin) / litMin * 100 };
+    });
+    scored.sort(function(a, b) { return a.errPct - b.errPct; });
+    return scored.slice(0, 3).map(function(r) {
+      return r.method + ' → ' + r.tcH + ' h (Err: ' + r.errPct.toFixed(1) + '%)';
+    });
+  };
+
+  if (validationResults && validationResults.LakeCounty) {
+    panel.add(ui.Panel({ style: {backgroundColor: '#cccccc', height: '1px', margin: '2px 0 1px 0', stretch: 'horizontal'} }));
+    panel.add(ui.Label({ value: '🎯 LITERATURE VALIDATION', style: {fontWeight: 'bold', fontSize: '12px', color: '#2e7d32', margin: '1px 0 1px 0'} }));
+    var val = validationResults.LakeCounty;
+    var colorLC = val.quality === 'Good' ? '#2e7d32' : val.quality === 'Fair' ? '#f57c00' : '#d32f2f';
+    var inRangeStr = val.tcInRange ? '✅ in range' : '⚠️ out of range';
+    panel.add(ui.Label({ value: '📖 ' + val.matchedBasin.name + ' (' + val.matchedBasin.area + ' km²)  —  App LFP = ' + val.compLfp + ' km (Err: ' + val.lfpError + '%)  |  ' + inRangeStr,
+      style: {fontSize: '11px', fontWeight: 'bold', color: colorLC, margin: '2px 0 0 0'} }));
+    panel.add(ui.Label({ value: '    Lit:  LFP = ' + val.matchedBasin.lfp + ' km  |  Tc = ' + val.matchedBasin.tcMean + ' h  |  Range: [' + val.matchedBasin.tcRange[0] + ' – ' + val.matchedBasin.tcRange[1] + '] h',
+      style: {fontSize: '10px', color: '#555', margin: '0'} }));
+    var bmLC = findBestTcMatch(tcResults, val.matchedBasin.tcMean);
+    if (bmLC && bmLC.length > 0) {
+      panel.add(ui.Label({ value: '    Best match (1): ' + bmLC[0],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0'} }));
+      if (bmLC[1]) panel.add(ui.Label({ value: '                 (2): ' + bmLC[1],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0'} }));
+      if (bmLC[2]) panel.add(ui.Label({ value: '                 (3): ' + bmLC[2],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0 0 2px 0'} }));
+    }
+  }
+
+  if (validationResults && validationResults.USValidation) {
+    var valUS = validationResults.USValidation;
+    var colorUS = valUS.quality === 'Good' ? '#2e7d32' : valUS.quality === 'Fair' ? '#f57c00' : '#d32f2f';
+    panel.add(ui.Label({ value: '🇺🇸 US Validation: ' + valUS.matchedBasin.name + ' (' + valUS.matchedBasin.area + ' km²)  —  App LFP = ' + valUS.compLfp + ' km (Err: ' + valUS.lfpError + '%)',
+      style: {fontSize: '11px', fontWeight: 'bold', color: colorUS, margin: '2px 0 0 0'} }));
+    panel.add(ui.Label({ value: '    Lit:  LFP = ' + valUS.matchedBasin.lfp + ' km  |  tc(Pe=10mm) = ' + valUS.litTcPe10 + ' h  |  t₀ = ' + valUS.matchedBasin.t0.toFixed(2) + ' h  |  β = ' + valUS.matchedBasin.beta.toFixed(3),
+      style: {fontSize: '10px', color: '#555', margin: '0'} }));
+    var bmUS = findBestTcMatch(tcResults, parseFloat(valUS.litTcPe10));
+    if (bmUS && bmUS.length > 0) {
+      panel.add(ui.Label({ value: '    Best match (1): ' + bmUS[0],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0'} }));
+      if (bmUS[1]) panel.add(ui.Label({ value: '                 (2): ' + bmUS[1],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0'} }));
+      if (bmUS[2]) panel.add(ui.Label({ value: '                 (3): ' + bmUS[2],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0 0 2px 0'} }));
+    }
+  }
+
+  if (validationResults && validationResults.Greek) {
+    var valGR = validationResults.Greek;
+    var colorGR = valGR.quality === 'Good' ? '#2e7d32' : valGR.quality === 'Fair' ? '#f57c00' : '#d32f2f';
+    panel.add(ui.Label({ value: '🇬🇷 Greek Validation: ' + valGR.matchedBasin.name + ' (' + valGR.matchedBasin.area + ' km²)  —  App LFP = ' + valGR.compLfp + ' km (Err: ' + valGR.lfpError + '%)',
+      style: {fontSize: '11px', fontWeight: 'bold', color: colorGR, margin: '2px 0 0 0'} }));
+    panel.add(ui.Label({ value: '    Lit:  LFP = ' + valGR.matchedBasin.lfp + ' km  |  tc(Pe=10mm) = ' + valGR.litTcPe10 + ' h  |  t₀ = ' + valGR.matchedBasin.t0.toFixed(2) + ' h  |  β = ' + valGR.matchedBasin.beta.toFixed(3),
+      style: {fontSize: '10px', color: '#555', margin: '0'} }));
+    var bmGR = findBestTcMatch(tcResults, parseFloat(valGR.litTcPe10));
+    if (bmGR && bmGR.length > 0) {
+      panel.add(ui.Label({ value: '    Best match (1): ' + bmGR[0],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0'} }));
+      if (bmGR[1]) panel.add(ui.Label({ value: '                 (2): ' + bmGR[1],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0'} }));
+      if (bmGR[2]) panel.add(ui.Label({ value: '                 (3): ' + bmGR[2],
+        style: {fontSize: '10px', color: '#1565c0', margin: '0 0 2px 0'} }));
+    }
+  }
+  panel.add(ui.Panel({ style: {backgroundColor: '#cccccc', height: '1px', margin: '2px 0 1px 0', stretch: 'horizontal'} }));
+  panel.add(ui.Label({ value: '⏱️ TIME OF CONCENTRATION RESULTS', style: {fontWeight: 'bold', fontSize: '12px', color: '#b71c1c', margin: '1px 0 1px 0'} }));
+  var suitableMethods = []; var unsuitableMethods = [];
+  tcResults.forEach(function(tc) { var isSuitable = TcCalculator.isMethodSuitable(tc.method, stats.area); var range = TcCalculator.areaRanges[tc.method]; tc.suitable = isSuitable; tc.areaRange = range ? range.desc : ''; if (isSuitable) { suitableMethods.push(tc); } else { unsuitableMethods.push(tc); } });
+  if (suitableMethods.length > 0) {
+    panel.add(ui.Label({ value: '✅ Recommended for this basin size (' + stats.area.toFixed(1) + ' km²):', style: {fontSize: '11px', fontWeight: 'bold', color: '#2e7d32', margin: '4px 0 2px 0'} }));
+    suitableMethods.forEach(function(tc) { var tcMin = tc.value.toFixed(1); var tcHour = (tc.value / 60).toFixed(2);
+      var row = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '2px 0', padding: '4px 6px', backgroundColor: '#e8f5e9', border: '1px solid #a5d6a7'} });
+      var methodLabel = tc.method; if (tc.method === 'Michailidi Variable Tc' && tc.parameters) { methodLabel += ' (β=' + tc.parameters.beta + ')'; }
+      row.add(ui.Label({value: '✓ ' + methodLabel + ':', style: {width: '200px', fontSize: '11px', fontWeight: 'bold', color: '#1b5e20', margin: '0', padding: '0'}}));
+      row.add(ui.Label({value: tcMin + ' min | ' + tcHour + ' hr', style: {fontSize: '11px', fontWeight: 'bold', color: '#1b5e20', margin: '0', padding: '0'}}));
+      panel.add(row); if (tc.areaRange) { panel.add(ui.Label({value: '     Range: ' + tc.areaRange, style: {fontSize: '10px', color: '#558b2f', margin: '0 0 2px 10px'}})); }
+    });
+  } else { panel.add(ui.Label({ value: '⚠️ No ideal method for this basin size (' + stats.area.toFixed(1) + ' km²)', style: {fontSize: '11px', fontWeight: 'bold', color: '#f57c00', margin: '4px 0 2px 0'} })); }
+  if (unsuitableMethods.length > 0) {
+    panel.add(ui.Label({ value: '○ Other methods (outside recommended range):', style: {fontSize: '10px', color: '#888', margin: '8px 0 2px 0'} }));
+    unsuitableMethods.forEach(function(tc) { var tcMin = tc.value.toFixed(1); var tcHour = (tc.value / 60).toFixed(2);
+      var row = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '1px 0', padding: '0'}});
+      row.add(ui.Label({value: tc.method + ':', style: {width: '200px', fontSize: '10px', color: '#999', margin: '0', padding: '0'}}));
+      row.add(ui.Label({value: tcMin + ' min | ' + tcHour + ' hr [' + tc.areaRange + ']', style: {fontSize: '10px', color: '#999', margin: '0', padding: '0'}})); panel.add(row);
+    });
+  }
+  panel.add(ui.Panel({ style: {backgroundColor: '#cccccc', height: '1px', margin: '4px 0 1px 0', stretch: 'horizontal'} }));
+  // Use recommended methods for summary only if there are at least 2;
+  // a single-method "summary" is meaningless (min=max=avg, variation=0).
+  var useRecommended = suitableMethods.length >= 2;
+  var summaryPool    = useRecommended ? suitableMethods : tcResults;
+  var tcValuesForSummary = summaryPool.map(function(t) { return t.value; });
+  var tcMinVal = Math.min.apply(null, tcValuesForSummary);
+  var tcMaxVal = Math.max.apply(null, tcValuesForSummary);
+  var tcAvgVal = tcValuesForSummary.reduce(function(a, b) { return a + b; }, 0) / tcValuesForSummary.length;
+  var summaryNote = useRecommended ? 'Recommended' : (suitableMethods.length === 1 ? 'All Methods — only 1 recommended method exists' : 'All Methods');
+  var summaryLabel = '📊 Tc Summary (' + summaryNote + '):';
+  var variation = ((tcMaxVal - tcMinVal) / tcAvgVal * 100).toFixed(1);
+  panel.add(ui.Label({ value: summaryLabel, style: {fontWeight: 'bold', fontSize: '12px', margin: '0px 0 0px 0'} }));
+  var summaryRow = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0px 0', padding: '0'}});
+  summaryRow.add(ui.Label({value: 'Range:', style: {width: '155px', fontSize: '12px', fontWeight: 'bold', color: '#d32f2f', margin: '0', padding: '0'}}));
+  summaryRow.add(ui.Label({value: 'Min: ' + tcMinVal.toFixed(1) + ' | Max: ' + tcMaxVal.toFixed(1) + ' | Avg: ' + tcAvgVal.toFixed(1) + ' min', style: {fontSize: '12px', color: '#444', margin: '0', padding: '0'}}));
+  panel.add(summaryRow);
+  var variationRow = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0px 0', padding: '0'}});
+  variationRow.add(ui.Label({value: 'Variation:', style: {width: '155px', fontSize: '12px', fontWeight: 'bold', color: '#d32f2f', margin: '0', padding: '0'}}));
+  variationRow.add(ui.Label({value: (tcMaxVal - tcMinVal).toFixed(1) + ' min (' + variation + '%)', style: {fontSize: '12px', color: '#444', margin: '0', padding: '0'}}));
+  panel.add(variationRow);
+  if (chartWidget) {
+    panel.add(ui.Panel({ style: {backgroundColor: '#cccccc', height: '2px', margin: '0px 0 0px 0', stretch: 'horizontal'} }));
+    panel.add(ui.Label({ value: '📈 LONGITUDINAL PROFILE', style: {fontWeight: 'bold', fontSize: '13px', margin: '0px 0 0px 0'} }));
+    panel.add(chartWidget);
+  }
+  return panel;
+};
+
+// ═══════════════════════════════════════════════════
+// 8a. BASIN-BASED ANALYSIS
+// ═══════════════════════════════════════════════════
+
+function performBasinAnalysis(coords) {
+  removeSearchResultAndLastClick();
+  basinStatusLabel.setValue('');
+  var selectedLevel = basinLevelSelect.getValue();
+  var basinPath = BASIN_PATHS[selectedLevel];
+  if (!basinPath) { print('❌ Invalid basin level'); return; }
+  var isHUC = selectedLevel.indexOf('HUC') !== -1;
+  var areaField = isHUC ? 'areasqkm' : 'SUB_AREA';
+  RESULTS_PANEL.clear();
+  RESULTS_PANEL.add(ui.Label({ value: '⏳ Basin Analysis...', style: {fontWeight: 'bold', fontSize: '20px', color: '#1a237e', margin: '0 0 10px 0'} }));
+  RESULTS_PANEL.add(ui.Label({ value: '📂 ' + DATA_SOURCE_NAME + ' | 🗺️ ' + selectedLevel, style: {fontSize: '12px', color: '#1565c0', fontWeight: 'bold', margin: '0 0 5px 0'} }));
+  RESULTS_PANEL.add(ui.Label({ value: '📍 ' + coords.lat.toFixed(4) + '°N, ' + coords.lon.toFixed(4) + '°E', style: {fontSize: '12px', color: '#666', margin: '0 0 5px 0'} }));
+  var loadingBox = ui.Panel({ style: {backgroundColor: '#e3f2fd', padding: '10px', margin: '0'} });
+  loadingBox.add(ui.Label({value: '🔄 Basin Analysis...', style: {fontSize: '12px', color: '#1565c0', fontWeight: 'bold', margin: '0 0 5px 0'}}));
+  loadingBox.add(ui.Label({value: '• Finding basin at ' + selectedLevel, style: {fontSize: '12px', color: '#1565c0', margin: '2px 0 2px 10px'}}));
+  loadingBox.add(ui.Label({value: '• Detecting streams & outlet', style: {fontSize: '12px', color: '#1565c0', margin: '2px 0 2px 10px'}}));
+  loadingBox.add(ui.Label({value: '• Computing LFP & Tc (20 methods)', style: {fontSize: '12px', color: '#1565c0', margin: '2px 0 2px 10px'}}));
+  RESULTS_PANEL.add(loadingBox);
+  var searchpoint = ee.Geometry.Point(coords.lon, coords.lat);
+  var basinFC = ee.FeatureCollection(basinPath).filterBounds(searchpoint).limit(1);
+  basinFC.size().evaluate(function(cnt) {
+    if (!cnt || cnt === 0) { RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '❌ No ' + selectedLevel + ' basin found at this point!', style: {color: '#d32f2f', fontWeight: 'bold'}})); return; }
+    print('✅ Basin found at ' + selectedLevel);
+    var parsedBasinFC = isHUC ? basinFC.map(function(f) { return f.set('areasqkm_num', ee.Number.parse(f.get(areaField))); }) : basinFC;
+    var attrAreaField = isHUC ? 'areasqkm_num' : areaField;
+    var basinAttrArea = parsedBasinFC.aggregate_sum(attrAreaField);
+    var basinGeomArea = basinFC.geometry().area(100);
+    ee.List([basinAttrArea, basinGeomArea]).evaluate(function(results) {
+      var areaFromAttr = results[0]; var areaFromGeom = results[1] / 1e6;
+      print('🗺️ Basin area — attribute: ' + (areaFromAttr || 0).toFixed(2) + ' km² | geometry: ' + areaFromGeom.toFixed(2) + ' km²');
+      var basinAreaKm2 = (areaFromAttr && areaFromAttr > 0) ? areaFromAttr : areaFromGeom;
+      if (!basinAreaKm2 || basinAreaKm2 <= 0) basinAreaKm2 = 100;
+      var basinAreaGeomKm2 = areaFromGeom;
+      var basinGeom = basinFC.geometry();
+      var basinStreams = StreamData.filterBounds(basinGeom);
+      var properties = ee.Dictionary({ ids: basinStreams.aggregate_array(FIELD_ID), downstreams: basinStreams.aggregate_array(FIELD_NEXT), lengths: basinStreams.aggregate_array(FIELD_LENGTH) });
+      properties.evaluate(function(data) {
+        var computeStart = Date.now();
+        if (!data || !data.ids || data.ids.length === 0) { RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '❌ No streams found in basin!', style: {color: '#d32f2f'}})); return; }
+        var segCount = data.ids.length;
+        print('📊 Streams in basin: ' + segCount);
+        var segmentMap = {};
+        for (var i = 0; i < data.ids.length; i++) { var segKey = normalizeId(data.ids[i]); var lengthVal = data.lengths[i] || 0; var lengthKm = (LENGTH_UNIT === 'meter') ? lengthVal / 1000 : lengthVal; segmentMap[segKey] = { downstream: data.downstreams[i], length: lengthKm }; }
+        var upstreamLookup = buildUpstreamLookup(data.ids, data.downstreams);
+        var allNormIds = Object.keys(segmentMap);
+        var outletId = findOutletSegment(allNormIds, segmentMap, upstreamLookup);
+        if (!outletId || !segmentMap[outletId]) { RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '❌ Could not determine outlet segment!', style: {color: '#d32f2f'}})); return; }
+        print('🎯 Outlet: ' + outletId);
+        var maxIterations = Math.max(250000, Math.ceil(segCount * 1.1));
+        var queue = [{id: outletId, length: 0}]; var parentMap = {}; var leafNodes = []; var allUpstreamSegments = {}; var iterations = 0;
+        if (DATA_SOURCE_NAME === 'EU-Hydro') {
+          var bestLengthMap = {}; var visitCount = {}; bestLengthMap[outletId] = 0;
+          while (queue.length > 0 && iterations < maxIterations) { iterations++; var current = queue.shift(); var segment = segmentMap[current.id]; if (!segment) continue; allUpstreamSegments[current.id] = true; var newLength = current.length + segment.length; var upstreamIds = upstreamLookup[current.id] || [];
+            if (upstreamIds.length === 0) { leafNodes.push({id: current.id, length: newLength}); } else { upstreamIds.forEach(function(upId) { var safeUpId = normalizeId(upId); if (segmentMap[safeUpId]) { if (!bestLengthMap.hasOwnProperty(safeUpId) || newLength > bestLengthMap[safeUpId]) { visitCount[safeUpId] = (visitCount[safeUpId] || 0) + 1; if (visitCount[safeUpId] > 10) return; bestLengthMap[safeUpId] = newLength; parentMap[safeUpId] = current.id; queue.push({id: safeUpId, length: newLength}); } } }); } }
+        } else {
+          while (queue.length > 0 && iterations < maxIterations) { iterations++; var current = queue.shift(); var segment = segmentMap[current.id]; if (!segment) continue; allUpstreamSegments[current.id] = true; var newLength = current.length + segment.length; var upstreamIds = upstreamLookup[current.id] || [];
+            if (upstreamIds.length === 0) { leafNodes.push({id: current.id, length: newLength}); } else { upstreamIds.forEach(function(upId) { var safeUpId = normalizeId(upId); if (!parentMap.hasOwnProperty(safeUpId) && segmentMap[safeUpId]) { parentMap[safeUpId] = current.id; queue.push({id: safeUpId, length: newLength}); } }); } }
+        }
+        print('⏱️ BFS: ' + iterations + ' steps, ' + leafNodes.length + ' leaf nodes');
+        if (leafNodes.length === 0) { RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '⚠️ No upstream path found!', style: {color: '#f57c00'}})); return; }
+        var longestLeaf = leafNodes.reduce(function(prev, curr) { return (prev.length > curr.length) ? prev : curr; });
+        var reconstructedPath = []; var currId = longestLeaf.id;
+        while (currId) { reconstructedPath.push(currId); currId = parentMap[currId]; if (currId === outletId) { reconstructedPath.push(currId); break; } }
+        var fullPath = reconstructedPath.reverse();
+        var longest = { path: fullPath, length: longestLeaf.length };
+        print('✅ LFP: ' + longest.length.toFixed(2) + ' km (' + longest.path.length + ' segments)');
+        var pathListForProfile = longest.path.slice().reverse();
+        var allUpstreamIds = Object.keys(allUpstreamSegments).map(function(id) { return ID_IS_STRING ? id : Number(id); });
+        var pathList = pathListForProfile;
+        var offsetMap = {}; var currentDist = 0;
+        for (var k = 0; k < pathList.length; k++) { var sId = pathList[k]; offsetMap[String(sId)] = currentDist; if (segmentMap[sId]) currentDist += segmentMap[sId].length * 1000; }
+        var serverOffsetDict = ee.Dictionary(offsetMap); var totalLenM = longest.length * 1000; var samplingStep = Math.max(30, totalLenM / 3000);
+        var pathListTyped = pathList.map(function(id) { return ID_IS_STRING ? id : Number(id); });
+        var rawStreams = StreamData.filter(ee.Filter.inList(FIELD_ID, ee.List(pathListTyped)));
+        var processedStreams = rawStreams.map(function(f) { var idVal = f.get(FIELD_ID); var idStr = ID_IS_STRING ? ee.String(idVal) : ee.Number(idVal).format('%d'); return f.set('ID_STR', idStr); });
+        var profilePoints = getProfileFast(processedStreams, serverOffsetDict, elevImg, samplingStep);
+        profilePoints = profilePoints.sort('distance');
+        var elevationChart = ui.Chart.feature.byFeature(profilePoints, 'distance', ['first']).setChartType('LineChart').setOptions({ title: 'Longitudinal Profile (Source → Outlet)', vAxis: {title: 'Elevation (m)', gridlines: {count: 8}}, hAxis: {title: 'Distance from Source (m)', gridlines: {count: 10}}, colors: ['#1565c0'], lineWidth: 2, pointSize: 0, legend: {position: 'none'}, chartArea: {width: '85%', height: '70%'}, explorer: {actions: ['dragToZoom', 'rightClickToReset']} });
+        elevationChart.onClick(function(distance) { var dMin = distance - (samplingStep/2); var dMax = distance + (samplingStep/2); var profileSegment = profilePoints.filter(ee.Filter.and(ee.Filter.gt('distance', dMin), ee.Filter.lt('distance', dMax))); Map.centerObject(profileSegment, 14); SELECTED_PROFILE_SEGMENT_LAYER = ui.Map.Layer(profileSegment, {color: 'red', width:5}, 'Selected'); Map.layers().set(15, SELECTED_PROFILE_SEGMENT_LAYER); });
+        var geomForStats = processedStreams.union(1).geometry(); var geomLengthServer = geomForStats.length();
+        var elevationStats = elevImg.reduceRegion({ geometry: geomForStats, reducer: ee.Reducer.minMax().combine(ee.Reducer.mean(), '', true), scale: 90, bestEffort: true });
+        var upstreamListEE = ee.List(allUpstreamIds); var upstreamStreams = StreamData.filter(ee.Filter.inList(FIELD_ID, upstreamListEE));
+        profilePoints.aggregate_array('distance').evaluate(function(distances) { profilePoints.aggregate_array('first').evaluate(function(elevations) { geomLengthServer.evaluate(function(geomLengthM) { var geomLengthKm = (geomLengthM / 1000).toFixed(2);
+          elevationStats.evaluate(function(zVals) {
+            if (!zVals || zVals.b1_max === null || zVals.b1_max === undefined || zVals.b1_min === null || zVals.b1_min === undefined || zVals.b1_mean === null || zVals.b1_mean === undefined) { zVals = { b1_max: 1000, b1_min: 0, b1_mean: 500 }; }
+            var maxZ = zVals.b1_max, minZ = zVals.b1_min, meanZ = zVals.b1_mean;
+            var H_diff = maxZ - minZ; var L_m = longest.length * 1000; var L_km = longest.length;
+            var L_ft = L_m * 3.28084; var L_miles = L_km * 0.621371;
+            var S_avg = H_diff / L_m; if (S_avg === 0) S_avg = 0.0001;
+            var profileData = []; for (var p = 0; p < distances.length; p++) { profileData.push({distance: distances[p], elevation: elevations[p]}); }
+            var slope1085Data = TcCalculator.calculate1085Slope(profileData);
+            var S_1085 = slope1085Data ? slope1085Data.slope : S_avg; if (S_1085 <= 0) S_1085 = 0.0001;
+            var S_m_per_km = H_diff / L_km; var S_percent = S_avg * 100;
+            var A_km2 = basinAreaKm2; var iE_default = 10; var b_est = Math.max(2, Math.pow(A_km2, 0.4) * 1.5);
+            var tcResults = [];
+            tcResults.push(TcCalculator.kirpich(L_m, S_avg));
+            var kirpich1085 = TcCalculator.kirpich(L_m, S_1085); kirpich1085.method = 'Kirpich (10-85 slope)'; kirpich1085.notes = 'More representative slope'; tcResults.push(kirpich1085);
+            tcResults.push(TcCalculator.bransbyWilliams(L_km, A_km2, S_m_per_km));
+            tcResults.push(TcCalculator.nrcsLag(L_ft, S_percent, 70));
+            var nrcs80 = TcCalculator.nrcsLag(L_ft, S_percent, 80); nrcs80.method = 'NRCS Lag (CN=80)'; tcResults.push(nrcs80);
+            tcResults.push(TcCalculator.giandotti(A_km2, L_km, meanZ, minZ));
+            tcResults.push(TcCalculator.temez(L_km, S_avg));
+            tcResults.push(TcCalculator.passini(A_km2, L_km, S_avg));
+            tcResults.push(TcCalculator.ventura(A_km2, S_avg));
+            tcResults.push(TcCalculator.johnstoneCross(L_miles, S_avg));
+            tcResults.push(TcCalculator.izzard(L_m, S_avg, iE_default));
+            tcResults.push(TcCalculator.usACE(L_m, S_avg, iE_default));
+            tcResults.push(TcCalculator.morgaliLinsley(L_m, S_avg, iE_default));
+            tcResults.push(TcCalculator.askew(L_km, S_avg, A_km2, iE_default));
+            tcResults.push(TcCalculator.kadoyaFukushima(A_km2, iE_default));
+            tcResults.push(TcCalculator.papadakisKazan(L_km, S_avg, iE_default));
+            tcResults.push(TcCalculator.aronEtAl(L_m, A_km2, S_avg, iE_default, 0.035, b_est));
+            tcResults.push(TcCalculator.loukasQuick(L_km, A_km2, S_avg, iE_default, 10, b_est));
+            tcResults.push(TcCalculator.michailidiVariableTc(A_km2, L_km, S_avg, iE_default, 0.035, b_est));
+            tcResults.push(TcCalculator.snyder(L_km, null, A_km2));
+            var avgTcMin = tcResults.reduce(function(sum, tc) { return sum + tc.value; }, 0) / tcResults.length;
+            var michailidiResult = null;
+            tcResults.forEach(function(tc) { if (tc.method === 'Michailidi Variable Tc') michailidiResult = tc; });
+            var michailidiParams = michailidiResult ? michailidiResult.parameters : null;
+            var validationResults = TcCalculator.validateWithLiterature(L_km, avgTcMin, A_km2, michailidiParams, selectedLevel);
+            var stats = { computeTime: Date.now() - computeStart, segmentCount: data.ids.length, upstreamCount: allUpstreamIds.length, lfpSegmentCount: pathList.length, lengthKm: longest.length.toFixed(2), lengthGeomKm: geomLengthKm, lengthM: L_m.toFixed(0), maxElev: maxZ, minElev: minZ, meanElev: meanZ, elevDiff: H_diff, avgSlope: S_avg, slope1085: S_1085, area: A_km2, areaGeom: basinAreaGeomKm2, basinMethod: selectedLevel, step: samplingStep.toFixed(1) };
+            RESULTS_PANEL.clear(); RESULTS_PANEL.add(createAnalysisPanel(stats, tcResults, elevationChart, validationResults));
+            RESULTS_PANEL.add(ui.Panel({ style: {backgroundColor: '#cccccc', height: '2px', margin: '0px 0 2px 0', stretch: 'horizontal'} }));
+            RESULTS_PANEL.add(ui.Label({ value: '📥 DOWNLOAD (KML)', style: {fontWeight: 'bold', fontSize: '13px', color: '#2e7d32', margin: '0px 0 0px 0'} }));
+            var lfpForExport = processedStreams.map(function(f) { return f.set('layer', 'Longest_Flow_Path', 'length_km', longest.length); });
+            var upstreamForExport = upstreamStreams.map(function(f) { return f.set('layer', 'Upstream_Network'); });
+            var downloadPanel = ui.Panel({style: {margin: '0'}});
+            downloadPanel.add(ui.Label({ value: '🔴 Longest Flow Path (' + pathList.length + ' seg)', style: {color: '#1565c0', fontSize: '12px', margin: '1px 0'}, targetUrl: lfpForExport.getDownloadURL({format: 'kml', filename: 'longest_flow_path'}) }));
+            downloadPanel.add(ui.Label({ value: '🔵 Upstream Network (' + allUpstreamIds.length + ' seg)', style: {color: '#1565c0', fontSize: '12px', margin: '1px 0'}, targetUrl: upstreamForExport.getDownloadURL({format: 'kml', filename: 'upstream_network'}) }));
+            var basinGeomSimplified = basinFC.union(1).geometry().simplify({maxError: 50});
+            var basinForExport = ee.FeatureCollection([ee.Feature(basinGeomSimplified, { 'layer': 'Basin_Boundary', 'area_km2': A_km2 })]);
+            downloadPanel.add(ui.Label({ value: '🗺️ Basin (' + selectedLevel + ')', style: {color: '#1565c0', fontSize: '12px', margin: '1px 0'}, targetUrl: basinForExport.getDownloadURL({format: 'kml', filename: 'basin'}) }));
+            RESULTS_PANEL.add(downloadPanel);
+
+            // ── CSV Download ──────────────────────────────
+            var csvDataUrl = buildCSVDataUrl(stats, tcResults);
+            RESULTS_PANEL.add(ui.Label({
+              value: '📄 Download Results as CSV',
+              style: {color: '#2e7d32', fontSize: '12px', fontWeight: 'bold', margin: '4px 0 2px 0'},
+              targetUrl: csvDataUrl
+            }));
+
+            RESULTS_PANEL.add(ui.Label({ value: '💡 Click on a stream within the basin for segment analysis', style: {fontSize: '11px', color: '#888', fontStyle: 'italic', margin: '6px 0 2px 0'} }));
+            RESULTS_PANEL.add(ui.Button({ label: '🗑️ Clear Results', style: {stretch: 'horizontal', margin: '4px 0 0 0'}, onClick: function() { removeSearchResultAndLastClick(); RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '📍 Click on a river segment on the map for analysis.', style: {fontSize: '11px', color: '#666'}})); } }));
+            var basinStyle = ee.FeatureCollection([ee.Feature(basinGeomSimplified)]).style({ color: '#1565c0', fillColor: '#1565c015', width: 3.5 }); BASIN_LAYER = ui.Map.Layer(basinStyle, {}, 'Basin (' + selectedLevel + ')'); Map.add(BASIN_LAYER);
+            UPSTREAM_NETWORK = ui.Map.Layer(basinStreams, {color: '#2196F3', width: 1.5}, 'Streams (' + allUpstreamIds.length + ')'); Map.add(UPSTREAM_NETWORK);
+            LONGEST = ui.Map.Layer(processedStreams, {color: '#d32f2f', width: 3}, 'LFP (' + pathList.length + ')'); Map.add(LONGEST);
+            var outletEEId = ID_IS_STRING ? outletId : Number(outletId); var outletFeat = StreamData.filter(ee.Filter.eq(FIELD_ID, outletEEId)).first(); var outletPt = ee.Feature(outletFeat).geometry().centroid(); var outletFC = ee.FeatureCollection([ee.Feature(outletPt, {label: 'Outlet'})]);
+            SELECTED = ui.Map.Layer(outletFC.style({color: 'yellow', pointSize: 8, width: 3}), {}, 'Outlet'); Map.add(SELECTED);
+            print('✅ Basin analysis complete! 20 Tc methods computed');
+            basinStatusLabel.setValue('✅ Completed — click another point or toggle button to change mode');
+            basinStatusLabel.style().set('color', '#2e7d32');
+          }); }); }); });
+      }); });
+    });
+}
+
+// ═══════════════════════════════════════════════════
+// 8b. SEGMENT-BASED ANALYSIS (Map Click)
+// ═══════════════════════════════════════════════════
+
+Map.onClick(function(coords){
+    if (analysisMode === 'browse') return;
+    if (analysisMode === 'basin') { performBasinAnalysis(coords); return; }
+    removeSearchResultAndLastClick();  
+    print("📍 Point selected (" + DATA_SOURCE_NAME + ")");
+    RESULTS_PANEL.clear();
+    RESULTS_PANEL.add(ui.Label({ value: '⏳ Analyzing...', style: {fontWeight: 'bold', fontSize: '20px', color: '#1a237e', margin: '0 0 10px 0'} }));
+    RESULTS_PANEL.add(ui.Label({ value: '📂 ' + DATA_SOURCE_NAME, style: {fontSize: '12px', color: '#1565c0', fontWeight: 'bold', margin: '0 0 5px 0'} }));
+    RESULTS_PANEL.add(ui.Label({ value: '📍 ' + coords.lat.toFixed(4) + '°N, ' + coords.lon.toFixed(4) + '°E', style: {fontSize: '12px', color: '#666', margin: '0 0 5px 0'} }));
+    var riverNameLabel = ui.Label({ value: '🏞️ River: ...', style: {fontSize: '12px', color: '#2e7d32', fontWeight: 'bold', margin: '0 0 10px 0'} });
+    RESULTS_PANEL.add(riverNameLabel);
+    var loadingBox = ui.Panel({ style: {backgroundColor: '#e3f2fd', padding: '10px', margin: '0'} });
+    loadingBox.add(ui.Label({value: '🔄 Computing...', style: {fontSize: '12px', color: '#1565c0', fontWeight: 'bold', margin: '0 0 5px 0'}}));
+    loadingBox.add(ui.Label({value: '• Finding upstream network', style: {fontSize: '12px', color: '#1565c0', margin: '2px 0 2px 10px'}}));
+    loadingBox.add(ui.Label({value: '• Extracting longest flow path', style: {fontSize: '12px', color: '#1565c0', margin: '2px 0 2px 10px'}}));
+    loadingBox.add(ui.Label({value: '• Building elevation profile', style: {fontSize: '12px', color: '#1565c0', margin: '2px 0 2px 10px'}}));
+    loadingBox.add(ui.Label({value: '• Calculating Tc parameters (20 methods)', style: {fontSize: '12px', color: '#1565c0', margin: '2px 0 2px 10px'}}));
+    RESULTS_PANEL.add(loadingBox);
+    RESULTS_PANEL.add(ui.Label({ value: 'Please wait...', style: {fontSize: '12px', color: '#888', margin: '15px 0 0 0'} }));
+    var searchpoint = ee.Geometry.Point(coords.lon, coords.lat);
+    var getSelectedFeature;
+    if (DATA_SOURCE_NAME === 'FreeFlowingRivers') {
+      var spatialFilter = ee.Filter.withinDistance({distance: 5000, leftField: '.geo', rightField: '.geo', maxError: 10});
+      var joined = ee.Join.saveAll({matchesKey: 'neighbors', measureKey: 'distance', ordering: 'distance'}).apply({primary: searchpoint, secondary: StreamData, condition: spatialFilter});
+      getSelectedFeature = ee.Feature(ee.List(ee.Feature(joined.first()).get('neighbors')).get(0));
+    } else {
+      var searchBuffer = searchpoint.buffer(5000); var nearbySegments = StreamData.filterBounds(searchBuffer);
+      var withDistance = nearbySegments.map(function(f) { var dist = ee.Feature(f).geometry().distance(searchpoint); return ee.Feature(f).set('_click_dist', dist); });
+      getSelectedFeature = ee.Feature(withDistance.sort('_click_dist').first());
+    }
+    var selectedFeature = getSelectedFeature; var startID = selectedFeature.get(FIELD_ID);
+    if (DATA_SOURCE_NAME === 'FreeFlowingRivers') { selectedFeature.get('MAIN_RIV').evaluate(function(riverName) { riverNameLabel.setValue('🏞️ River: ' + (riverName || 'Unknown')); }); }
+    else if (DATA_SOURCE_NAME === 'NHDFlowline') { riverNameLabel.setValue('🏞️ Dataset: ' + DATA_SOURCE_NAME + ' (USA Streams)'); }
+    else { riverNameLabel.setValue('🏞️ Dataset: ' + DATA_SOURCE_NAME); }
+    var allSegments;
+    if (DATA_SOURCE_NAME === 'FreeFlowingRivers') { var basinID = selectedFeature.get(BASIN_FIELD); allSegments = StreamData.filter(ee.Filter.eq(BASIN_FIELD, basinID)); } else { allSegments = StreamData; }
+    allSegments.size().evaluate(function(segCountPre) {
+      print('📊 Segment count (pre-check): ' + segCountPre);
+      if (segCountPre > 500000) {
+        print('🔶 Very large basin (' + segCountPre + ' segments). Downloading data, please be patient...');
+        try { RESULTS_PANEL.widgets().get(0).setValue('⏳ Large Basin — ' + segCountPre + ' segments...'); } catch(e) {}
+        RESULTS_PANEL.add(ui.Label({value: '🔶 Very large basin detected. This analysis may take 1-3 minutes.', style: {fontSize: '12px', color: '#e65100', fontWeight: 'bold', margin: '5px 0'}}));
+      }
+      var properties = ee.Dictionary({ ids: allSegments.aggregate_array(FIELD_ID), downstreams: allSegments.aggregate_array(FIELD_NEXT), lengths: allSegments.aggregate_array(FIELD_LENGTH) });
+      properties.evaluate(function(data) {
+      var computeStart = Date.now();
+      var segCount = data.ids.length;
+      print('📊 Total segments: ' + segCount);
+      var segmentMap = {};
+      for (var i = 0; i < data.ids.length; i++) { var segKey = normalizeId(data.ids[i]); var lengthVal = data.lengths[i] || 0; var lengthKm = (LENGTH_UNIT === 'meter') ? lengthVal / 1000 : lengthVal; segmentMap[segKey] = { downstream: data.downstreams[i], length: lengthKm }; }
+      var upstreamLookup = buildUpstreamLookup(data.ids, data.downstreams);
+      startID.evaluate(function(startIdRaw) {
+        var startIdVal = normalizeId(startIdRaw);
+        print('🔍 Start ID: ' + startIdVal);
+        if (!segmentMap[startIdVal]) { RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '❌ Segment not found!', style: {color: '#d32f2f'}})); return; } else { print('✅ Start segment found in map!'); }
+        var maxIterations = Math.max(250000, Math.ceil(segCount * 1.1));
+        var queue = [{id: startIdVal, length: 0}]; var parentMap = {}; var leafNodes = []; var allUpstreamSegments = {}; var iterations = 0;
+        if (DATA_SOURCE_NAME === 'EU-Hydro') {
+          var bestLengthMap = {}; var visitCount = {}; bestLengthMap[startIdVal] = 0;
+          print("🚀 BFS Starting (Branch Protected - EU-Hydro)...");
+          while (queue.length > 0 && iterations < maxIterations) { iterations++; if (iterations % 5000 === 0) { print('⏳ Analysis continuing... Step: ' + iterations + ' (Queue: ' + queue.length + ')'); }
+            var current = queue.shift(); var segment = segmentMap[current.id]; if (!segment) continue; allUpstreamSegments[current.id] = true; var newLength = current.length + segment.length; var upstreamIds = upstreamLookup[current.id] || [];
+            if (upstreamIds.length === 0) { leafNodes.push({id: current.id, length: newLength}); } else { upstreamIds.forEach(function(upId) { var safeUpId = normalizeId(upId); if (segmentMap[safeUpId]) { if (!bestLengthMap.hasOwnProperty(safeUpId) || newLength > bestLengthMap[safeUpId]) { visitCount[safeUpId] = (visitCount[safeUpId] || 0) + 1; if (visitCount[safeUpId] > 10) { return; } bestLengthMap[safeUpId] = newLength; parentMap[safeUpId] = current.id; queue.push({id: safeUpId, length: newLength}); } } }); } }
+        } else {
+          print("🚀 BFS Starting (Parent Pointer Method)...");
+          while (queue.length > 0 && iterations < maxIterations) { iterations++; if (iterations % 5000 === 0) { print('⏳ Analysis continuing... Step: ' + iterations + ' (Queue: ' + queue.length + ')'); }
+            var current = queue.shift(); var segment = segmentMap[current.id]; if (!segment) continue; allUpstreamSegments[current.id] = true; var newLength = current.length + segment.length; var upstreamIds = upstreamLookup[current.id] || [];
+            if (upstreamIds.length === 0) { leafNodes.push({id: current.id, length: newLength}); } else { upstreamIds.forEach(function(upId) { var safeUpId = normalizeId(upId); if (!parentMap.hasOwnProperty(safeUpId) && segmentMap[safeUpId]) { parentMap[safeUpId] = current.id; queue.push({id: safeUpId, length: newLength}); } }); } }
+        }
+        print('⏱️ Scan complete: ' + iterations + ' steps. Leaf nodes found: ' + leafNodes.length);
+        if (leafNodes.length === 0) { RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '⚠️ No upstream path found!', style: {color: '#f57c00'}})); return; }
+        var longestLeaf = leafNodes.reduce(function(prev, current) { return (prev.length > current.length) ? prev : current; });
+        var reconstructedPath = []; var currId = longestLeaf.id;
+        while (currId) { reconstructedPath.push(currId); currId = parentMap[currId]; if (currId === startIdVal) { reconstructedPath.push(currId); break; } }
+        var fullPath = reconstructedPath.reverse();
+        var longest = { path: fullPath, length: longestLeaf.length };
+        print('✅ Longest path found: ' + longest.length.toFixed(2) + ' km (' + longest.path.length + ' segments)');
+        var allUpstreamIds = Object.keys(allUpstreamSegments).map(function(id) { return ID_IS_STRING ? id : Number(id); });
+        var pathList = longest.path.slice().reverse();
+        var offsetMap = {}; var currentDist = 0;
+        for (var k = 0; k < pathList.length; k++) { var segId = pathList[k]; offsetMap[String(segId)] = currentDist; if (segmentMap[segId]) { currentDist += segmentMap[segId].length * 1000; } }
+        var serverOffsetDict = ee.Dictionary(offsetMap); var totalLenM = longest.length * 1000; var samplingStep = Math.max(30, totalLenM / 3000);
+        var pathListTyped = pathList.map(function(id) { return ID_IS_STRING ? id : Number(id); });
+        var rawStreams = StreamData.filter(ee.Filter.inList(FIELD_ID, ee.List(pathListTyped)));
+        var processedStreams = rawStreams.map(function(f) { var idVal = f.get(FIELD_ID); var idStr = ID_IS_STRING ? ee.String(idVal) : ee.Number(idVal).format('%d'); return f.set('ID_STR', idStr); });
+        var profilePoints = getProfileFast(processedStreams, serverOffsetDict, elevImg, samplingStep);
+        profilePoints = profilePoints.sort('distance');
+        var elevationChart = ui.Chart.feature.byFeature(profilePoints, 'distance', ['first']).setChartType('LineChart').setOptions({ title: 'Longitudinal Profile (Source → Outlet)', vAxis: {title: 'Elevation (m)', gridlines: {count: 8}}, hAxis: {title: 'Distance from Source (m)', gridlines: {count: 10}}, colors: ['#1565c0'], lineWidth: 2, pointSize: 0, legend: {position: 'none'}, chartArea: {width: '85%', height: '70%'}, explorer: {actions: ['dragToZoom', 'rightClickToReset']} });
+        elevationChart.onClick(function(distance) { var dMin = distance - (samplingStep/2); var dMax = distance + (samplingStep/2); var profileSegment = profilePoints.filter(ee.Filter.and(ee.Filter.gt('distance', dMin), ee.Filter.lt('distance', dMax))); Map.centerObject(profileSegment, 14); SELECTED_PROFILE_SEGMENT_LAYER = ui.Map.Layer(profileSegment, {color: 'red', width:5}, 'Selected'); Map.layers().set(15, SELECTED_PROFILE_SEGMENT_LAYER); });
+        var geomForStats = processedStreams.union(1).geometry(); var geomLengthServer = geomForStats.length();
+        var elevationStats = elevImg.reduceRegion({ geometry: geomForStats, reducer: ee.Reducer.minMax().combine(ee.Reducer.mean(), '', true), scale: 90, bestEffort: true });
+        profilePoints.aggregate_array('distance').evaluate(function(distances) { profilePoints.aggregate_array('first').evaluate(function(elevations) { geomLengthServer.evaluate(function(geomLengthM) { var geomLengthKm = (geomLengthM / 1000).toFixed(2);
+        elevationStats.evaluate(function(zVals) {
+          if (!zVals || zVals.b1_max === null || zVals.b1_max === undefined || zVals.b1_min === null || zVals.b1_min === undefined || zVals.b1_mean === null || zVals.b1_mean === undefined) { print('⚠️ Elevation data incomplete, using defaults'); zVals = { b1_max: 1000, b1_min: 0, b1_mean: 500 }; }
+          var maxZ = zVals.b1_max; var minZ = zVals.b1_min; var meanZ = zVals.b1_mean;
+          var H_diff = maxZ - minZ; var L_m = longest.length * 1000; var L_km = longest.length;
+          var L_ft = L_m * 3.28084; var L_miles = L_km * 0.621371;
+          var S_avg = H_diff / L_m; if (S_avg === 0) S_avg = 0.0001;
+          var profileData = []; for (var p = 0; p < distances.length; p++) { profileData.push({distance: distances[p], elevation: elevations[p]}); }
+          var slope1085Data = TcCalculator.calculate1085Slope(profileData);
+          var S_1085 = slope1085Data ? slope1085Data.slope : S_avg; if (S_1085 <= 0) S_1085 = 0.0001;
+          var S_m_per_km = H_diff / L_km; var S_percent = S_avg * 100;
+          print('🗺️ Finding basin area...');
+          var upstreamListEE = ee.List(allUpstreamIds); var upstreamStreams = StreamData.filter(ee.Filter.inList(FIELD_ID, upstreamListEE)); var upstreamGeometry = upstreamStreams.geometry();
+          var currentBasinType = basinTypeSelect.getValue();
+          if (currentBasinType === 'HUC') {
+            var hucLevels = [12, 10, 8, 6, 4];
+            var hucBasinPaths = { 12: "USGS/WBD/2017/HUC12", 10: "USGS/WBD/2017/HUC10", 8: "USGS/WBD/2017/HUC08", 6: "USGS/WBD/2017/HUC06", 4: "USGS/WBD/2017/HUC04" };
+            var outletGeom = searchpoint;
+            print('🗺️ Finding containing HUC basin (outlet-based, HUC12 → HUC4)...');
+            checkHucLevel(0);
+            function checkHucLevel(levelIndex) {
+              if (levelIndex >= hucLevels.length) { print('   ⚠️ No suitable HUC level found, using estimation'); var estimatedArea = longest.length * longest.length * 0.15; if (estimatedArea < 1) estimatedArea = 1; processWithArea(estimatedArea, null, 'Estimated', null); return; }
+              var level = hucLevels[levelIndex];
+              var outletBasin = ee.FeatureCollection(hucBasinPaths[level]).filterBounds(outletGeom).limit(1);
+              outletBasin.size().evaluate(function(basinCount) {
+                if (!basinCount || basinCount === 0) { print('   HUC' + level + ': No basin found at outlet'); checkHucLevel(levelIndex + 1); return; }
+                var parsedBasin = outletBasin.map(function(f) { return f.set('areasqkm_num', ee.Number.parse(f.get('areasqkm'))); });
+                var attrArea = parsedBasin.aggregate_sum('areasqkm_num'); var geomArea = outletBasin.geometry().area(100);
+                ee.List([attrArea, geomArea]).evaluate(function(areaResults) {
+                  var areaFromAttr = areaResults[0]; var areaFromGeom = areaResults[1] / 1e6;
+                  print('   HUC' + level + ' area — areasqkm: ' + (areaFromAttr || 0).toFixed(2) + ' km² | geometry: ' + areaFromGeom.toFixed(2) + ' km²');
+                  var areaKm2 = (areaFromAttr && areaFromAttr > 0) ? areaFromAttr : areaFromGeom;
+                  var basinGeom = outletBasin.geometry(); var containedStreams = upstreamStreams.filterBounds(basinGeom);
+                  ee.List([containedStreams.size(), upstreamStreams.size()]).evaluate(function(counts) {
+                    var contained = counts[0]; var total = counts[1]; var coverage = total > 0 ? contained / total : 0;
+                    print('   HUC' + level + ': coverage=' + (coverage * 100).toFixed(1) + '% (' + contained + '/' + total + '), area=' + (areaKm2 || 0).toFixed(2) + ' km²');
+                    if (coverage >= 0.90) { var A_km2 = areaKm2; if (!A_km2 || A_km2 <= 0) A_km2 = 100; print('   ✅ Selected HUC' + level + ' (coverage ' + (coverage * 100).toFixed(1) + '%)'); processWithArea(A_km2, areaFromGeom, 'USGS HUC' + level, outletBasin); }
+                    else { print('   ⏭️ Coverage too low (' + (coverage * 100).toFixed(1) + '%), trying next level'); checkHucLevel(levelIndex + 1); }
+                  }, function(error) { print('   ❌ Coverage check error at HUC' + level + ': ' + error); checkHucLevel(levelIndex + 1); });
+                }, function(error) { print('   ❌ Area error at HUC' + level + ': ' + error); checkHucLevel(levelIndex + 1); });
+              }, function(error) { print('   ❌ Error at HUC' + level + ': ' + error); checkHucLevel(levelIndex + 1); });
+            }
+          } else {
+            var hsLevels = [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2];
+            var hsBasinPaths = { 12: "WWF/HydroSHEDS/v1/Basins/hybas_12", 11: "WWF/HydroSHEDS/v1/Basins/hybas_11", 10: "WWF/HydroSHEDS/v1/Basins/hybas_10", 9: "WWF/HydroSHEDS/v1/Basins/hybas_9", 8: "WWF/HydroSHEDS/v1/Basins/hybas_8", 7: "WWF/HydroSHEDS/v1/Basins/hybas_7", 6: "WWF/HydroSHEDS/v1/Basins/hybas_6", 5: "WWF/HydroSHEDS/v1/Basins/hybas_5", 4: "WWF/HydroSHEDS/v1/Basins/hybas_4", 3: "WWF/HydroSHEDS/v1/Basins/hybas_3", 2: "WWF/HydroSHEDS/v1/Basins/hybas_2" };
+            var basinCounts = {}; var checksCompleted = 0;
+            print('🗺️ Finding containing basin (L12 → L2)...');
+            hsLevels.forEach(function(level) { var basins = ee.FeatureCollection(hsBasinPaths[level]).filterBounds(upstreamGeometry); basins.size().evaluate(function(count) { basinCounts[level] = count; print('   L' + level + ': ' + count + ' basin(s)'); checksCompleted++; if (checksCompleted === hsLevels.length) { selectOptimalLevel(); } }); });
+            function selectOptimalLevel() {
+              var bestLevel = null; var bestCount = null;
+              for (var i = 0; i < hsLevels.length; i++) { if (basinCounts[hsLevels[i]] === 1) { bestLevel = hsLevels[i]; bestCount = 1; print('   ✅ Single containing basin at Level ' + bestLevel); break; } }
+              if (bestLevel === null) { var minCount = Infinity; for (var j = 0; j < hsLevels.length; j++) { var cnt = basinCounts[hsLevels[j]]; if (cnt > 0 && cnt < minCount) { minCount = cnt; } } for (var kk = 0; kk < hsLevels.length; kk++) { if (basinCounts[hsLevels[kk]] === minCount) { bestLevel = hsLevels[kk]; bestCount = minCount; print('   ✅ Minimum ' + minCount + ' basins at Level ' + bestLevel + ' (will be merged)'); break; } } }
+              if (bestLevel === null) { var estimatedAreaFallback = longest.length * longest.length * 0.1; if (estimatedAreaFallback < 1) estimatedAreaFallback = 1; print('   ⚠️ No suitable HydroSHEDS level found, using estimation'); processWithArea(estimatedAreaFallback, null, 'Estimated', null); return; }
+              var selectedBasinsHS = ee.FeatureCollection(hsBasinPaths[bestLevel]).filterBounds(upstreamGeometry); var totalArea = selectedBasinsHS.aggregate_sum('SUB_AREA');
+              totalArea.evaluate(function(A_km2) { if (!A_km2 || A_km2 <= 0) A_km2 = 100; var basinMethodStr = bestCount === 1 ? 'HydroSHEDS L' + bestLevel : 'HydroSHEDS L' + bestLevel + ' (' + bestCount + ' merged)'; print('   ✅ Area: ' + A_km2.toFixed(2) + ' km²'); processWithArea(A_km2, null, basinMethodStr, selectedBasinsHS); });
+            }
+          }
+          function processWithArea(A_km2, areaGeomKm2, basinMethod, selectedBasins) {
+            if (!A_km2 || A_km2 <= 0) A_km2 = 100;
+            var iE_default = 10; var b_est = Math.max(2, Math.pow(A_km2, 0.4) * 1.5);
+            var tcResults = [];
+            tcResults.push(TcCalculator.kirpich(L_m, S_avg));
+            var kirpich1085 = TcCalculator.kirpich(L_m, S_1085); kirpich1085.method = 'Kirpich (10-85 slope)'; kirpich1085.notes = 'More representative slope'; tcResults.push(kirpich1085);
+            tcResults.push(TcCalculator.bransbyWilliams(L_km, A_km2, S_m_per_km));
+            tcResults.push(TcCalculator.nrcsLag(L_ft, S_percent, 70));
+            var nrcs80 = TcCalculator.nrcsLag(L_ft, S_percent, 80); nrcs80.method = 'NRCS Lag (CN=80)'; tcResults.push(nrcs80);
+            tcResults.push(TcCalculator.giandotti(A_km2, L_km, meanZ, minZ));
+            tcResults.push(TcCalculator.temez(L_km, S_avg));
+            tcResults.push(TcCalculator.passini(A_km2, L_km, S_avg));
+            tcResults.push(TcCalculator.ventura(A_km2, S_avg));
+            tcResults.push(TcCalculator.johnstoneCross(L_miles, S_avg));
+            tcResults.push(TcCalculator.izzard(L_m, S_avg, iE_default));
+            tcResults.push(TcCalculator.usACE(L_m, S_avg, iE_default));
+            tcResults.push(TcCalculator.morgaliLinsley(L_m, S_avg, iE_default));
+            tcResults.push(TcCalculator.askew(L_km, S_avg, A_km2, iE_default));
+            tcResults.push(TcCalculator.kadoyaFukushima(A_km2, iE_default));
+            tcResults.push(TcCalculator.papadakisKazan(L_km, S_avg, iE_default));
+            tcResults.push(TcCalculator.aronEtAl(L_m, A_km2, S_avg, iE_default, 0.035, b_est));
+            tcResults.push(TcCalculator.loukasQuick(L_km, A_km2, S_avg, iE_default, 10, b_est));
+            tcResults.push(TcCalculator.michailidiVariableTc(A_km2, L_km, S_avg, iE_default, 0.035, b_est));
+            tcResults.push(TcCalculator.snyder(L_km, null, A_km2));
+            var avgTcMin = tcResults.reduce(function(sum, tc) { return sum + tc.value; }, 0) / tcResults.length;
+            var michailidiResult = null;
+            tcResults.forEach(function(tc) { if (tc.method === 'Michailidi Variable Tc') michailidiResult = tc; });
+            var michailidiParams = michailidiResult ? michailidiResult.parameters : null;
+            var selectedLevel = basinLevelSelect.getValue();
+            var validationResults = TcCalculator.validateWithLiterature(L_km, avgTcMin, A_km2, michailidiParams, selectedLevel);
+            var stats = { computeTime: Date.now() - computeStart, segmentCount: data.ids.length, upstreamCount: allUpstreamIds.length, lfpSegmentCount: pathList.length, lengthKm: longest.length.toFixed(2), lengthGeomKm: geomLengthKm, lengthM: L_m.toFixed(0), maxElev: maxZ, minElev: minZ, meanElev: meanZ, elevDiff: H_diff, avgSlope: S_avg, slope1085: S_1085, area: A_km2, areaGeom: areaGeomKm2, basinMethod: basinMethod, step: samplingStep.toFixed(1) };
+            RESULTS_PANEL.clear(); var analysisContent = createAnalysisPanel(stats, tcResults, elevationChart, validationResults); RESULTS_PANEL.add(analysisContent);
+            RESULTS_PANEL.add(ui.Panel({ style: {backgroundColor: '#cccccc', height: '2px', margin: '0px 0 2px 0', stretch: 'horizontal'} }));
+            RESULTS_PANEL.add(ui.Label({ value: '📥 DOWNLOAD (KML)', style: {fontWeight: 'bold', fontSize: '13px', color: '#2e7d32', margin: '0px 0 0px 0'} }));
+            var lfpForExport = processedStreams.map(function(f) { return f.set('layer', 'Longest_Flow_Path', 'length_km', longest.length); });
+            var upstreamForExport = upstreamStreams.map(function(f) { return f.set('layer', 'Upstream_Network'); });
+            var downloadPanel = ui.Panel({style: {margin: '0'}});
+            downloadPanel.add(ui.Label({ value: '🔴 Longest Flow Path (' + pathList.length + ' seg)', style: {color: '#1565c0', fontSize: '12px', margin: '1px 0'}, targetUrl: lfpForExport.getDownloadURL({format: 'kml', filename: 'longest_flow_path'}) }));
+            downloadPanel.add(ui.Label({ value: '🔵 Upstream Network (' + allUpstreamIds.length + ' seg)', style: {color: '#1565c0', fontSize: '12px', margin: '1px 0'}, targetUrl: upstreamForExport.getDownloadURL({format: 'kml', filename: 'upstream_network'}) }));
+            if (selectedBasins) { var basinGeomSimplified = selectedBasins.union(1).geometry().simplify({maxError: 50}); var basinForExport = ee.FeatureCollection([ee.Feature(basinGeomSimplified, { 'layer': 'Basin_Boundary', 'area_km2': A_km2 })]); downloadPanel.add(ui.Label({ value: '🗺️ Basin', style: {color: '#1565c0', fontSize: '12px', margin: '1px 0'}, targetUrl: basinForExport.getDownloadURL({format: 'kml', filename: 'basin'}) })); }
+            RESULTS_PANEL.add(downloadPanel);
+
+            // ── CSV Download ──────────────────────────────
+            var csvDataUrl = buildCSVDataUrl(stats, tcResults);
+            RESULTS_PANEL.add(ui.Label({
+              value: '📄 Download Results as CSV',
+              style: {color: '#2e7d32', fontSize: '12px', fontWeight: 'bold', margin: '4px 0 2px 0'},
+              targetUrl: csvDataUrl
+            }));
+
+            RESULTS_PANEL.add(ui.Button({ label: '🗑️ Clear Results', style: {stretch: 'horizontal', margin: '8px 0 0 0'}, onClick: function() { removeSearchResultAndLastClick(); RESULTS_PANEL.clear(); RESULTS_PANEL.add(ui.Label({value: '📍 Click on a river segment on the map for analysis.', style: {fontSize: '11px', color: '#666'}})); } }));
+            if (selectedBasins) { var mergedBasin = selectedBasins.union(1); var simplifiedBasin = mergedBasin.geometry().simplify({maxError: 50}); var basinStyle = ee.FeatureCollection([ee.Feature(simplifiedBasin)]).style({ color: '#1565c0', fillColor: '#1565c015', width: 3.5 }); BASIN_LAYER = ui.Map.Layer(basinStyle, {}, 'Basin'); Map.add(BASIN_LAYER); }
+            var upstreamDisplayFC;
+            if (allUpstreamIds.length <= 5000) { upstreamDisplayFC = upstreamStreams; }
+            else if (BASIN_FIELD) { upstreamDisplayFC = allSegments; }
+            else if (selectedBasins) { upstreamDisplayFC = StreamData.filterBounds(selectedBasins.geometry()); }
+            else { upstreamDisplayFC = null; print('ℹ️ Upstream (' + allUpstreamIds.length + ') — display skipped (no basin boundary available)'); }
+            if (upstreamDisplayFC) { UPSTREAM_NETWORK = ui.Map.Layer(upstreamDisplayFC, {color: '#2196F3', width: 1.5}, 'Upstream (' + allUpstreamIds.length + ')'); Map.add(UPSTREAM_NETWORK); }
+            LONGEST = ui.Map.Layer(processedStreams, {color: '#d32f2f', width: 3}, 'LFP (' + pathList.length + ')');
+            var outletCollection = ee.FeatureCollection([selectedFeature]); SELECTED = ui.Map.Layer(outletCollection.style({color: 'yellow', width: 5, fillColor: 'yellow'}), {}, 'Outlet');
+            Map.add(LONGEST); Map.add(SELECTED);
+            print('✅ Analysis complete! 20 Tc methods computed');
+          }
+        }); }); }); });
+      }); });
+    });
+});
+
+// ═══════════════════════════════════════════════════
+// 9. CSV EXPORT HELPER
+// ═══════════════════════════════════════════════════
+
+function buildCSVDataUrl(stats, tcResults) {
+  var lines = [];
+
+  // ── Title ─────────────────────────────────────────
+  lines.push('BATU LFP + Tc Calculator v1.9 - Analysis Results');
+  lines.push('Data Source,' + DATA_SOURCE_NAME);
+  lines.push('');
+
+  // ── Basin Geometry ─────────────────────────────────
+  lines.push('BASIN GEOMETRY');
+  lines.push('Parameter,Value,Unit');
+  lines.push('LFP Length (Geometry),' + stats.lengthGeomKm + ',km');
+  lines.push('LFP Length (Attribute),' + stats.lengthKm + ',km');
+  lines.push('Average Slope,' + (stats.avgSlope * 100).toFixed(3) + ',%');
+  lines.push('10-85 Slope,' + (stats.slope1085 ? (stats.slope1085 * 100).toFixed(3) : 'N/A') + ',%');
+  lines.push('Max Elevation,' + stats.maxElev.toFixed(0) + ',m');
+  lines.push('Min Elevation,' + stats.minElev.toFixed(0) + ',m');
+  lines.push('Relief,' + stats.elevDiff.toFixed(0) + ',m');
+  lines.push('Basin Area (Attribute),' + (stats.area ? stats.area.toFixed(2) : 'N/A') + ',km2');
+  if (stats.areaGeom) {
+    lines.push('Basin Area (Geometry),' + stats.areaGeom.toFixed(2) + ',km2');
+  }
+  lines.push('Basin Method,' + (stats.basinMethod || 'N/A') + ',');
+  lines.push('Upstream Segments,' + (stats.upstreamCount || 'N/A') + ',');
+  lines.push('LFP Segments,' + (stats.lfpSegmentCount || 'N/A') + ',');
+  lines.push('');
+
+  // ── Tc Results ────────────────────────────────────
+  lines.push('TIME OF CONCENTRATION RESULTS');
+  lines.push('Method,Tc_min,Tc_hr,Area_Range_km2,Recommended');
+
+  var suitableVals = [];
+  tcResults.forEach(function(tc) {
+    var suitable = TcCalculator.isMethodSuitable(tc.method, stats.area);
+    var rangeObj = TcCalculator.areaRanges[tc.method];
+    var rangeDesc = rangeObj ? rangeObj.desc : 'All sizes';
+    var rec = suitable ? 'Yes' : 'No';
+    if (suitable) suitableVals.push(tc.value);
+    // Wrap method name in quotes in case it contains commas
+    lines.push('"' + tc.method + '",' +
+               tc.value.toFixed(1) + ',' +
+               (tc.value / 60).toFixed(2) + ',' +
+               '"' + rangeDesc + '",' +
+               rec);
+  });
+  lines.push('');
+
+  // ── Summary ──────────────────────────────────────
+  var summaryVals = suitableVals.length > 0 ? suitableVals :
+                    tcResults.map(function(tc) { return tc.value; });
+  var tcMin = Math.min.apply(null, summaryVals);
+  var tcMax = Math.max.apply(null, summaryVals);
+  var tcAvg = summaryVals.reduce(function(a, b) { return a + b; }, 0) / summaryVals.length;
+  var variation = (tcMax - tcMin) / tcAvg * 100;
+  var summaryScope = suitableVals.length > 0 ? 'Recommended Methods' : 'All Methods';
+
+  lines.push('SUMMARY (' + summaryScope + ')');
+  lines.push('Parameter,Value,Unit');
+  lines.push('Min Tc,' + tcMin.toFixed(1) + ',min');
+  lines.push('Max Tc,' + tcMax.toFixed(1) + ',min');
+  lines.push('Avg Tc,' + tcAvg.toFixed(1) + ',min');
+  lines.push('Variation,' + (tcMax - tcMin).toFixed(1) + ',min');
+  lines.push('Variation,' + variation.toFixed(1) + ',%');
+
+  var csvStr = lines.join('\n');
+  return 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvStr);
+}
+
+function removeSearchResultAndLastClick() {
+  try {Map.remove(LONGEST);} catch(err) {}
+  try {Map.remove(SELECTED);} catch(err) {}
+  try {Map.remove(BASIN_LAYER);} catch(err) {}
+  try {Map.remove(UPSTREAM_NETWORK);} catch(err) {}
+  try {Map.remove(STREAM_LAYER);} catch(err) {}
+  STREAM_LAYER = null;
+}
+
+print('🌊 LFP + Tc Calculator v1.9 — Validation: Lit|App|BestMatch rows');
