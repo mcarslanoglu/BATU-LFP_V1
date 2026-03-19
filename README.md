@@ -1,4 +1,4 @@
-NKU-MAN
+BATU LFP + Tc Calculator
 =======================
 
 [An online interactive web-based application for determining longest flow path and computing Time of Concentration of any of watersheds or basins]
