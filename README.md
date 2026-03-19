@@ -1,7 +1,7 @@
 NKU-MAN
 =======================
 
-[Morphometric Analysis in Google Earth Engine: An online interactive web-based application for global-scale analysis.](https://www.sciencedirect.com/science/article/pii/S1364815223000269)
+[An online interactive web-based application for determining longest flow path and computing Time of Concentration of any of watersheds or basins]
 
 [BATU LFP + Tc Calculator Application](https://mynet34.users.earthengine.app/view/batu-lfp--tc-calculator-v10)
 
